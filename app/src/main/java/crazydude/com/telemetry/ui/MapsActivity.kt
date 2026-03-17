@@ -47,6 +47,7 @@ import com.serenegiant.usbcameratest4.CameraFragment
 import com.serenegiant.usbcameratest4.CameraFragmentListener
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.converter.Converter
+import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.manager.SensorTimeoutManager
 import crazydude.com.telemetry.maps.MapLine
@@ -109,6 +110,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private var marker: MapMarker? = null
     private var polyLine: MapLine? = null
     private var headingPolyline: MapLine? = null
+    private var flightPlanLines: MutableList<MapLine> = mutableListOf()
 
     private lateinit var connectButton: Button
     private lateinit var replayButton: ImageView
@@ -480,6 +482,8 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         headingPolyline = null;
         polyLine?.remove();
         polyLine = null;
+        flightPlanLines.forEach { it.remove() }
+        flightPlanLines.clear()
         marker?.remove();
         marker = null;
 
@@ -506,6 +510,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         if (p != null) {
             polyLine?.submitPoints(p)
         }
+        drawFlightPlans()
         showMyLocation()
     }
 
@@ -546,6 +551,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             }
             map?.setPadding(0, topLayout.measuredHeight, 0, 0)
             initHeadingLine()
+            drawFlightPlans()
         }
         if (simulateLifecycle) {
             map?.onCreate(null)
@@ -566,6 +572,21 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             }
             headingPolyline?.let { it.color = preferenceManager.getHeadLineColor() }
             marker?.setIcon(R.drawable.ic_plane, preferenceManager.getPlaneColor())
+        }
+        drawFlightPlans()
+    }
+
+    private fun drawFlightPlans() {
+        flightPlanLines.forEach { it.remove() }
+        flightPlanLines.clear()
+        if (!preferenceManager.isFlightPlansEnabled()) return
+        val plans = FlightPlanManager(this).getPlans()
+        for (plan in plans) {
+            if (!plan.visible || plan.waypoints.size < 2) continue
+            val line = map?.addPolyline(4f, plan.color, *plan.waypoints.toTypedArray())
+            if (line != null) {
+                flightPlanLines.add(line)
+            }
         }
     }
 
@@ -1518,6 +1539,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         super.onDestroy()
         headingPolyline = null;
         polyLine = null;
+        flightPlanLines.clear()
         map?.onDestroy()
         if (!isChangingConfigurations) {
             dataService?.setDataListener(null)

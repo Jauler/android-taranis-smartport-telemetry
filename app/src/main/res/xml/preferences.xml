@@ -93,6 +93,35 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="Flight plans">
+
+        <SwitchPreference
+                android:title="Show flight plans"
+                android:summary="Show imported flight plan lines on the map"
+                android:defaultValue="true"
+                android:key="show_flight_plans"/>
+
+        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
+                android:defaultValue="@color/colorFlightPlan"
+                android:key="flight_plan_color"
+                app:cpv_showAlphaSlider="true"
+                app:cpv_allowPresets="false"
+                app:cpv_allowCustom="true"
+                android:summary="Default color for new flight plans"
+                android:title="Flight plan line color"/>
+
+        <Preference
+                android:title="Import flight plan"
+                android:summary="Import a CSV file with waypoints (lat,lon per line)"
+                android:key="import_flight_plan"/>
+
+        <Preference
+                android:title="Manage flight plans"
+                android:summary="View, toggle, or delete imported flight plans"
+                android:key="manage_flight_plans"/>
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="USB Serial">
         <ListPreference
             android:title="Baudrate"
