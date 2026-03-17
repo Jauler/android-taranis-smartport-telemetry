@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceFragmentCompat
-import com.google.firebase.analytics.FirebaseAnalytics
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
@@ -23,10 +22,6 @@ class PrefsFragment : PreferenceFragmentCompat() {
     private lateinit var flightPlanManager: FlightPlanManager
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         updateSummary()
-        FirebaseAnalytics.getInstance(context!!).setUserProperty(
-            "telemetry_sharing_enable",
-            prefManager.isSendDataEnabled().toString().toLowerCase()
-        )
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -144,7 +139,5 @@ class PrefsFragment : PreferenceFragmentCompat() {
     }
 
     private fun updateSummary() {
-        preferenceScreen.findPreference("callsign").summary = prefManager.getCallsign()
-        preferenceScreen.findPreference("model").summary = prefManager.getModel()
     }
 }

@@ -14,7 +14,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import crazydude.com.telemetry.R
-import crazydude.com.telemetry.api.*
 import crazydude.com.telemetry.logger.OtxCsvLogger
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.maps.Position
@@ -24,9 +23,6 @@ import crazydude.com.telemetry.protocol.decoder.DataDecoder
 import crazydude.com.telemetry.protocol.pollers.DataPoller
 import crazydude.com.telemetry.protocol.pollers.UsbDataPoller
 import crazydude.com.telemetry.ui.MapsActivity
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -49,7 +45,6 @@ class DataService : Service(), DataDecoder.Listener {
     private var lastAltitude: Float = 0.0f
     private var lastSpeed: Float = 0.0f
     private var lastHeading: Float = 0.0f
-    private val apiHandler = Handler()
     private lateinit var preferenceManager: PreferenceManager
     val points: ArrayList<Position> = ArrayList()
     private var notification: Notification? = null
@@ -207,75 +202,7 @@ class DataService : Service(), DataDecoder.Listener {
         dataListener?.onConnected()
         logListener?.onConnected()
 
-        if (preferenceManager.isSendDataEnabled()) {
-            createSession()
-        }
-
         startForeground(1, notification)
-    }
-
-    fun createSession() {
-        if (!isConnected()) {
-            return
-        }
-        ApiManager.apiService.createSession(
-            SessionCreateRequest(preferenceManager.getCallsign(), preferenceManager.getModel())
-        ).enqueue(object : Callback<SessionCreateResponse?> {
-            override fun onFailure(call: Call<SessionCreateResponse?>, t: Throwable) {
-                Handler()
-                    .postDelayed({ createSession() }, 5000)
-            }
-
-            override fun onResponse(
-                call: Call<SessionCreateResponse?>,
-                response: Response<SessionCreateResponse?>
-            ) {
-                try {
-                    response?.body()?.let {
-                        it?.sessionId.let { sendTelemetryData(it) }
-                    }
-                } catch (e: NullPointerException) {
-                    // Unknown
-                }
-            }
-        })
-    }
-
-    fun sendTelemetryData(sessionId: String) {
-        if (!isConnected()) {
-            return
-        }
-        apiHandler.postDelayed({
-            if (hasGPSFix && isArmed) {
-                ApiManager.apiService.sendData(
-                    AddLogRequest(
-                        sessionId,
-                        lastLatitude,
-                        lastLongitude,
-                        lastAltitude,
-                        lastHeading,
-                        lastSpeed
-                    )
-                ).enqueue(object : Callback<AddLogResponse?> {
-                    override fun onFailure(call: Call<AddLogResponse?>, t: Throwable) {
-                        sendTelemetryData(sessionId)
-                    }
-
-                    override fun onResponse(
-                        call: Call<AddLogResponse?>,
-                        response: Response<AddLogResponse?>
-                    ) {
-                        try {
-                            sendTelemetryData(sessionId)
-                        } catch (e: NullPointerException) {
-
-                        }
-                    }
-                })
-            } else {
-                sendTelemetryData(sessionId)
-            }
-        }, 5000)
     }
 
     override fun onGPSData(latitude: Double, longitude: Double) {

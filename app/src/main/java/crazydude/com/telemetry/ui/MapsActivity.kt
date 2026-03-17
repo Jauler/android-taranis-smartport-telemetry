@@ -35,7 +35,6 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.nex3z.flowlayout.FlowLayout
@@ -199,7 +198,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private lateinit var sensorsConverters: HashMap<String, Converter>
 
     private lateinit var preferenceManager: PreferenceManager
-    private lateinit var firebaseAnalytics: FirebaseAnalytics
 
     private var mapType = OsmMapWrapper.MAP_TYPE_DEFAULT
 
@@ -357,8 +355,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             Pair(PreferenceManager.sensors.elementAt(25).name, throttle),
             Pair(PreferenceManager.sensors.elementAt(26).name, tlmRate)
         )
-
-        firebaseAnalytics = FirebaseAnalytics.getInstance(this)
 
         settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -546,7 +542,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private fun showMyLocation() {
         if (checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             map?.isMyLocationEnabled = true
-            checkSendDataDialogShown()
         } else {
             ActivityCompat.requestPermissions(
                 this,
@@ -1570,11 +1565,9 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             if (requestCode == REQUEST_LOCATION_PERMISSION) {
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     map?.isMyLocationEnabled = true
-                    checkSendDataDialogShown()
                 } else {
                     this.showDialog(AlertDialog.Builder(this)
                         .setMessage("Location permission is needed in order to discover BLE devices and show your location on map")
-                        .setOnDismissListener { checkSendDataDialogShown() }
                         .setPositiveButton("OK", null)
                         .create())
                 }
@@ -1985,36 +1978,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         }
     }
 
-
-    private fun checkSendDataDialogShown() {
-        if (!preferenceManager.isSendDataDialogShown()) {
-            firebaseAnalytics.logEvent("send_data_dialog_shown", null)
-            val dialog = AlertDialog.Builder(this)
-                .setMessage(
-                    Html.fromHtml(
-                        "You can enable telemetry data sharing. Telemetry data sharing sends data to <a href='https://uavradar.org'>https://uavradar.org</a> at which" +
-                                "you can watch for other aicraft flights (just like flightradar24, but for UAV). You can assign" +
-                                " your callsign and your UAV model in the settings which will be used as your aircraft info. " +
-                                "Data sent when you arm your UAV and have valid 3D GPS Fix"
-                    )
-                )
-                .setPositiveButton("Enable") { _, i ->
-                    preferenceManager.setTelemetrySendingEnabled(true)
-                    firebaseAnalytics.setUserProperty("telemetry_sharing_enable", "true")
-                    firebaseAnalytics.logEvent("telemetry_sharing_enabled", null)
-                }
-                .setNegativeButton("Disable") { _, i ->
-                    preferenceManager.setTelemetrySendingEnabled(false)
-                    firebaseAnalytics.setUserProperty("telemetry_sharing_enable", "false")
-                    firebaseAnalytics.logEvent("telemetry_sharing_disabled", null)
-                }
-                .setCancelable(false)
-                .create()
-            this.showDialog(dialog)
-            dialog.findViewById<TextView>(android.R.id.message)?.movementMethod =
-                LinkMovementMethod.getInstance()
-        }
-    }
 
     private fun showMapTypeSelectorDialog() {
         val fDialogTitle = "Select Map Type"
