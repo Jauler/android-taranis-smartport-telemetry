@@ -1,7 +1,6 @@
 package crazydude.com.telemetry.maps
 
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.SphericalUtil
+import crazydude.com.telemetry.utils.GeoUtils
 
 abstract class MapLine {
     abstract fun remove()
@@ -10,21 +9,22 @@ abstract class MapLine {
     abstract fun clear()
     abstract fun removeAt(index: Int)
 
-    abstract val size:Int
-    abstract var color:Int
+    abstract val size: Int
+    abstract var color: Int
 
-    var lastLatLon  = LatLng(0.0,0.0)
+    private var lastLat = 0.0
+    private var lastLon = 0.0
 
-    var spoints: MutableList<Position> =  mutableListOf()
+    var spoints: MutableList<Position> = mutableListOf()
 
-    public fun submitPoints(points: List<Position>) {
+    fun submitPoints(points: List<Position>) {
         spoints.addAll(points)
     }
 
-    private fun simplifySPoints(limit: Int)
-    {
-        if ( size == 0) {
-            lastLatLon  = LatLng(0.0,0.0)
+    private fun simplifySPoints(limit: Int) {
+        if (size == 0) {
+            lastLat = 0.0
+            lastLon = 0.0
         }
 
         var threshold = 5
@@ -40,11 +40,11 @@ abstract class MapLine {
             }
         }
 
-        spoints = spoints.filter { i->
-            val ll = LatLng(i.lat, i.lon)
-            val d = SphericalUtil.computeDistanceBetween(lastLatLon,ll)
-            if ( d >= threshold) {
-                lastLatLon = ll
+        spoints = spoints.filter { i ->
+            val d = GeoUtils.computeDistanceBetween(lastLat, lastLon, i.lat, i.lon)
+            if (d >= threshold) {
+                lastLat = i.lat
+                lastLon = i.lon
                 true
             } else {
                 false
@@ -52,21 +52,21 @@ abstract class MapLine {
         }.toMutableList()
     }
 
-    public fun commitPoints(limit: Int) {
-        simplifySPoints(limit);
-        var toRemove = (size + spoints.size ) - limit;
-        if ( toRemove >= size ){
-            var fi = spoints.size - limit;
-            if ( fi < 0 ) fi = 0;
+    fun commitPoints(limit: Int) {
+        simplifySPoints(limit)
+        var toRemove = (size + spoints.size) - limit
+        if (toRemove >= size) {
+            var fi = spoints.size - limit
+            if (fi < 0) fi = 0
             val subList = spoints.subList(fi, spoints.size).toList()
             clear()
             addPoints(subList)
         } else {
-            for ( i in 1..toRemove) {
+            for (i in 1..toRemove) {
                 removeAt(0)
             }
             addPoints(spoints)
-            spoints.clear();
+            spoints.clear()
         }
     }
 }

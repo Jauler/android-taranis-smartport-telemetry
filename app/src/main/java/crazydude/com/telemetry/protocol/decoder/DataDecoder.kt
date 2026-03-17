@@ -1,6 +1,5 @@
 package crazydude.com.telemetry.protocol.decoder
 
-import com.google.android.gms.maps.model.LatLng
 import crazydude.com.telemetry.maps.Position
 import crazydude.com.telemetry.protocol.Protocol
 

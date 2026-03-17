@@ -34,12 +34,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.MapView
-import com.google.android.gms.maps.model.LatLng
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.maps.android.SphericalUtil
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.nex3z.flowlayout.FlowLayout
@@ -54,8 +50,8 @@ import crazydude.com.telemetry.maps.MapLine
 import crazydude.com.telemetry.maps.MapMarker
 import crazydude.com.telemetry.maps.MapWrapper
 import crazydude.com.telemetry.maps.Position
-import crazydude.com.telemetry.maps.google.GoogleMapWrapper
 import crazydude.com.telemetry.maps.osm.OsmMapWrapper
+import crazydude.com.telemetry.utils.GeoUtils
 import crazydude.com.telemetry.protocol.decoder.DataDecoder
 import crazydude.com.telemetry.protocol.pollers.LogPlayer
 import crazydude.com.telemetry.service.DataService
@@ -63,6 +59,8 @@ import kotlinx.android.synthetic.main.top_layout.*
 import kotlinx.android.synthetic.main.view_map.*
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.util.MapTileIndex
 import uk.co.deanwild.materialshowcaseview.IShowcaseListener
 import uk.co.deanwild.materialshowcaseview.MaterialShowcaseView
 import java.io.File
@@ -81,13 +79,44 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         private const val REQUEST_READ_PERMISSION: Int = 3
         private const val ACTION_USB_DEVICE = "action_usb_device"
         private val MAP_TYPE_ITEMS = arrayOf(
-            "Road Map (Google)",
-            "Satellite (Google)",
-            "Terrain (Google)",
-            "Hybrid (Google)",
             "OpenStreetMap (can be cached)",
-            "OpenTopoMap (can be cached)"
+            "OpenTopoMap (can be cached)",
+            "Satellite - ESRI (can be cached)",
+            "Satellite + Streets - ESRI (can be cached)"
         )
+
+        private val ESRI_SATELLITE_TILE_SOURCE = object : OnlineTileSourceBase(
+            "ESRISatellite", 0, 19, 256, "",
+            arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")
+        ) {
+            override fun getTileURLString(pMapTileIndex: Long): String {
+                return baseUrl + MapTileIndex.getZoom(pMapTileIndex) +
+                    "/" + MapTileIndex.getY(pMapTileIndex) +
+                    "/" + MapTileIndex.getX(pMapTileIndex)
+            }
+        }
+
+        private val ESRI_TRANSPORTATION_OVERLAY_TILE_SOURCE = object : OnlineTileSourceBase(
+            "ESRITransportation", 0, 19, 256, "",
+            arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/")
+        ) {
+            override fun getTileURLString(pMapTileIndex: Long): String {
+                return baseUrl + MapTileIndex.getZoom(pMapTileIndex) +
+                    "/" + MapTileIndex.getY(pMapTileIndex) +
+                    "/" + MapTileIndex.getX(pMapTileIndex)
+            }
+        }
+
+        private val ESRI_BOUNDARIES_PLACES_OVERLAY_TILE_SOURCE = object : OnlineTileSourceBase(
+            "ESRIBoundariesPlaces", 0, 19, 256, "",
+            arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/")
+        ) {
+            override fun getTileURLString(pMapTileIndex: Long): String {
+                return baseUrl + MapTileIndex.getZoom(pMapTileIndex) +
+                    "/" + MapTileIndex.getY(pMapTileIndex) +
+                    "/" + MapTileIndex.getX(pMapTileIndex)
+            }
+        }
 
         private const val CONNTYPE_NONE = 0
         private const val CONNTYPE_BT = 1
@@ -172,7 +201,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private lateinit var preferenceManager: PreferenceManager
     private lateinit var firebaseAnalytics: FirebaseAnalytics
 
-    private var mapType = GoogleMap.MAP_TYPE_NORMAL
+    private var mapType = OsmMapWrapper.MAP_TYPE_DEFAULT
 
     private var lastGPS = Position(0.0, 0.0)
     private var lastHeading = 0f
@@ -487,21 +516,21 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         marker?.remove();
         marker = null;
 
-        if (mapType in GoogleMap.MAP_TYPE_NORMAL..GoogleMap.MAP_TYPE_HYBRID) {
-            initGoogleMap(simulateLifecycle)
-        } else if (mapType == OsmMapWrapper.MAP_TYPE_DEFAULT) {
+        if (mapType == OsmMapWrapper.MAP_TYPE_DEFAULT) {
             initOSMMap(TileSourceFactory.DEFAULT_TILE_SOURCE)
+        } else if (mapType == OsmMapWrapper.MAP_TYPE_SATELLITE) {
+            initOSMMap(ESRI_SATELLITE_TILE_SOURCE)
+        } else if (mapType == OsmMapWrapper.MAP_TYPE_SATELLITE_HYBRID) {
+            initOSMMap(ESRI_SATELLITE_TILE_SOURCE, listOf(ESRI_TRANSPORTATION_OVERLAY_TILE_SOURCE, ESRI_BOUNDARIES_PLACES_OVERLAY_TILE_SOURCE))
         } else {
             initOSMMap(TileSourceFactory.OpenTopo)
         }
     }
 
-    private fun initOSMMap(tileSource: OnlineTileSourceBase) {
+    private fun initOSMMap(tileSource: OnlineTileSourceBase, overlayTileSources: List<OnlineTileSourceBase> = emptyList()) {
         val mapView = org.osmdroid.views.MapView(this)
         mapHolder.addView(mapView)
-        map = OsmMapWrapper(applicationContext, mapView, tileSource) {
-            initHeadingLine()
-        }
+        map = OsmMapWrapper(applicationContext, mapView, tileSource, { initHeadingLine() }, overlayTileSources)
         map?.setOnCameraMoveStartedListener {
             setFollowMode(false);
         }
@@ -530,35 +559,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         }
     }
 
-    private fun initGoogleMap(simulateLifecycle: Boolean) {
-        val mapView = MapView(this)
-        mapHolder.addView(mapView)
-        map = GoogleMapWrapper(this, mapView) {
-            showMyLocation()
-            map?.mapType = mapType
-            topLayout.measure(
-                RelativeLayout.LayoutParams.MATCH_PARENT,
-                RelativeLayout.LayoutParams.WRAP_CONTENT
-            )
-
-            polyLine = map?.addPolyline(preferenceManager.getRouteColor())
-            val p = dataService?.points;
-            if (p != null) {
-                polyLine?.submitPoints(p)
-            }
-            map?.setOnCameraMoveStartedListener {
-                setFollowMode(false);
-            }
-            map?.setPadding(0, topLayout.measuredHeight, 0, 0)
-            initHeadingLine()
-            drawFlightPlans()
-        }
-        if (simulateLifecycle) {
-            map?.onCreate(null)
-            map?.onStart()
-            map?.onResume()
-        }
-    }
 
     private fun initHeadingLine() {
         polyLine?.let { it.color = preferenceManager.getRouteColor() }
@@ -2021,7 +2021,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         val builder = AlertDialog.Builder(this)
         builder.setTitle(fDialogTitle)
 
-        val checkItem = preferenceManager.getMapType() - 1
+        val checkItem = preferenceManager.getMapType() - OsmMapWrapper.MAP_TYPE_DEFAULT
 
         builder.setSingleChoiceItems(
             MAP_TYPE_ITEMS,
@@ -2029,7 +2029,7 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         ) { dialog, item ->
             mapHolder.removeAllViews()
             map = null
-            mapType = item + 1
+            mapType = item + OsmMapWrapper.MAP_TYPE_DEFAULT
             preferenceManager.setMapType(mapType)
             initMap(true)
             dialog.dismiss()
@@ -2128,9 +2128,8 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         if (lastGPS.lat != 0.0 && lastGPS.lon != 0.0) {
             headingPolyline?.let { headingLine ->
                 headingLine.setPoint(0, lastGPS)
-                val computeOffset =
-                    SphericalUtil.computeOffset(lastGPS.toLatLng(), 1000.0, lastHeading.toDouble())
-                headingLine.setPoint(1, Position(computeOffset.latitude, computeOffset.longitude))
+                val (offsetLat, offsetLon) = GeoUtils.computeOffset(lastGPS.lat, lastGPS.lon, 1000.0, lastHeading.toDouble())
+                headingLine.setPoint(1, Position(offsetLat, offsetLon))
             }
         }
     }
@@ -2386,8 +2385,8 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
 
                 for (i in 0..list.size - 2) {
                     if (this.lastGPS.lat != 0.0 && this.lastGPS.lon != 0.0) {
-                        this.lastTraveledDistance += SphericalUtil.computeDistanceBetween(
-                            this.lastGPS.toLatLng(), LatLng(list[i].lat, list[i].lon)
+                        this.lastTraveledDistance += GeoUtils.computeDistanceBetween(
+                            this.lastGPS.lat, this.lastGPS.lon, list[i].lat, list[i].lon
                         )
                     }
                     lastGPS = Position(list[i].lat, list[i].lon)
@@ -2404,9 +2403,8 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             if (Position(latitude, longitude) != lastGPS) {
                 var d = 0.0;
                 if (this.lastGPS.lat != 0.0 && this.lastGPS.lon != 0.0) {
-                    d = SphericalUtil.computeDistanceBetween(
-                        this.lastGPS.toLatLng(),
-                        LatLng(latitude, longitude)
+                    d = GeoUtils.computeDistanceBetween(
+                        this.lastGPS.lat, this.lastGPS.lon, latitude, longitude
                     )
                 }
                 lastGPS = Position(latitude, longitude)

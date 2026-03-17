@@ -1,8 +1,7 @@
 package crazydude.com.telemetry.protocol.decoder
 
 import android.util.Log
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.SphericalUtil
+import crazydude.com.telemetry.utils.GeoUtils
 import crazydude.com.telemetry.protocol.Protocol
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -138,11 +137,8 @@ class LTMDataDecoder(listener: Listener) : DataDecoder(listener) {
             this.latitude != 0.0 && this.longitude != 0.0 &&
             this.homeLatitude != 0.0 && this.homeLongitude != 0.0) {
 
-                val distance = SphericalUtil.computeDistanceBetween(
-                    LatLng(
-                        this.homeLatitude,
-                        this.homeLongitude
-                    ), LatLng(this.latitude, this.longitude)
+                val distance = GeoUtils.computeDistanceBetween(
+                    this.homeLatitude, this.homeLongitude, this.latitude, this.longitude
                 )
 
                 listener.onDistanceData(distance.toInt())

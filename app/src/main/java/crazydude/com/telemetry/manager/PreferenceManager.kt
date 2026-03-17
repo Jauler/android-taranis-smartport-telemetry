@@ -1,8 +1,8 @@
 package crazydude.com.telemetry.manager
 
 import android.content.Context
-import com.google.android.gms.maps.GoogleMap
 import crazydude.com.telemetry.R
+import crazydude.com.telemetry.maps.osm.OsmMapWrapper
 
 class PreferenceManager(context: Context) {
 
@@ -94,7 +94,7 @@ class PreferenceManager(context: Context) {
     }
 
     fun getMapType(): Int {
-        return sharedPreferences.getInt("map_type", GoogleMap.MAP_TYPE_NORMAL)
+        return sharedPreferences.getInt("map_type", OsmMapWrapper.MAP_TYPE_DEFAULT)
     }
 
     fun setMapType(mapType: Int) {

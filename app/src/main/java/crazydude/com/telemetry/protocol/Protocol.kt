@@ -1,8 +1,7 @@
 package crazydude.com.telemetry.protocol
 
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.SphericalUtil
 import crazydude.com.telemetry.protocol.decoder.DataDecoder
+import crazydude.com.telemetry.utils.GeoUtils
 
 abstract class Protocol(val dataDecoder: DataDecoder) {
 
@@ -189,31 +188,22 @@ abstract class Protocol(val dataDecoder: DataDecoder) {
 
                 if (homeLatitude != 0.0 && homeLongitude != 0.0) {
 
-                    val distance = SphericalUtil.computeDistanceBetween(
-                        LatLng(
-                            homeLatitude,
-                            homeLongitude
-                        ), LatLng(latitude, longitude)
+                    val distance = GeoUtils.computeDistanceBetween(
+                        homeLatitude, homeLongitude, latitude, longitude
                     )
 
                     dataDecoder.decodeData(Protocol.Companion.TelemetryData(DISTANCE, distance.toInt()))
-                } else if (originLatitude != 0.0 && originLongitude != 0.0 ) {
+                } else if (originLatitude != 0.0 && originLongitude != 0.0) {
 
-                    val distance = SphericalUtil.computeDistanceBetween(
-                        LatLng(
-                            originLatitude,
-                            originLongitude
-                        ), LatLng(latitude, longitude)
+                    val distance = GeoUtils.computeDistanceBetween(
+                        originLatitude, originLongitude, latitude, longitude
                     )
 
                     dataDecoder.decodeData(Protocol.Companion.TelemetryData(DISTANCE, distance.toInt()))
-                } else if (armedLatitude != 0.0 && armedLongitude != 0.0 ) {
+                } else if (armedLatitude != 0.0 && armedLongitude != 0.0) {
 
-                    val distance = SphericalUtil.computeDistanceBetween(
-                        LatLng(
-                            armedLatitude,
-                            armedLongitude
-                        ), LatLng(latitude, longitude)
+                    val distance = GeoUtils.computeDistanceBetween(
+                        armedLatitude, armedLongitude, latitude, longitude
                     )
                     dataDecoder.decodeData(Protocol.Companion.TelemetryData(DISTANCE, distance.toInt()))
                 } else {

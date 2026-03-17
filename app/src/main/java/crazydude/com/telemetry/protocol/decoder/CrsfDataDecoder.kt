@@ -1,8 +1,6 @@
 package crazydude.com.telemetry.protocol.decoder
 
 import android.util.Log
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.SphericalUtil
 import crazydude.com.telemetry.protocol.Protocol
 
 const val MAX_RSSI = -30
