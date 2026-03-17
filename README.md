@@ -2,31 +2,47 @@
 
 This is fork of CrazyDude's excellent application https://github.com/CrazyDude1994/android-taranis-smartport-telemetry
 
-![](doc/screenshot.jpg) 
-
-This version contains support of ROTG01/ROTG02 video receivers with recording:
-
-![](doc/uvc_video_tx16s.jpg) 
+![](doc/screenshot.jpg)
 
 Latest build is available in Releases: https://github.com/RomanLut/android-taranis-smartport-telemetry/releases
 
-I am contributing most bugsfixes and enchancements to Crazydude's repository. But due to significant differences in UI structure and SDK versions, some features are not merged or merged with delay:
-- UVC video support, video recording (DVR)
+This version adds and changes the following compared to upstream:
+
 - sensors: Airspeed, Vertical speed, Altitude MSL, Throttle, Cell Voltage, Telemetry Rate, Distance to home, Travelled distance
-- CRSF link quality sensors 
+- CRSF link quality sensors
 - RC Channels display (8ch for Mavlink v1, 18ch for Mavlink v2, 16 channels for CRSF<sup>1</sup>)
 - better support for CRSF and LTM telemetry
 - connection status voice messages
 - USB VCP cable connection to radios
-- topological map
+- topological map (OpenTopoMap)
+- satellite map and satellite + streets hybrid map (ESRI, free, no API key required, cacheable offline)
+- flight plan overlay: import a CSV file (lat,lon per line) to draw a planned flight path on the map; multiple plans supported
 - GPX export
 - KML export
 - context menu for deleting and renaming logs
-- UI interface enchancements
+- UI interface enhancements
 - automatic reconnection (Bluetooth/BLE)
 - improved stability and bug fixes
+- removed Google Maps dependency (replaced with OSMDroid + ESRI tiles)
+- removed UAV radar / telemetry sharing server functionality
+- removed UVC external video receiver support
 
 <sup>1</sup> *Channels are displayed with CRSF protocol if they are sent with telemetry. It works with this PR which allows to connect directly to Express LRS TX module:* https://github.com/ExpressLRS/ExpressLRS/pull/2731
+
+## Map types
+
+| Map | Source | Offline cache |
+|-----|--------|---------------|
+| OpenStreetMap | OSM | Yes |
+| OpenTopoMap | OSM | Yes |
+| Satellite | ESRI ArcGIS World Imagery | Yes |
+| Satellite + Streets | ESRI ArcGIS World Imagery + Transportation + Places overlays | Yes |
+
+No API keys required for any map type.
+
+## Flight plan overlay
+
+Import a CSV file with one `latitude,longitude` coordinate per line. Consecutive points form a path. Multiple CSV files can be imported to display multiple plans simultaneously. Plans are persisted across sessions and can be toggled or deleted from Settings.
 
 # Routing telemetry to the application
 
