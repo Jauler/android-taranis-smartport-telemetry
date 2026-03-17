@@ -19,3 +19,6 @@ usbCamera/build
 /libuvccamera/src/main/obj
 /usbCameraCommon/build
 /usbCameraTest4/build
+app/debug.keystore
+debug.keystore
+release.keystore
