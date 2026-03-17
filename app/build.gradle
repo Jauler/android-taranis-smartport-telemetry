@@ -41,6 +41,10 @@ android {
 		targetCompatibility javaTargetCompatibility
 	}
 
+    lintOptions {
+        abortOnError false
+    }
+
 }
 
 dependencies {

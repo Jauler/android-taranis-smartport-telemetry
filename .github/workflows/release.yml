@@ -36,7 +36,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease -x libuvccamera:ndkBuild
+        run: ./gradlew :app:assembleRelease
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
