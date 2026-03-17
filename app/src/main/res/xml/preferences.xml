@@ -24,14 +24,6 @@
             android:defaultValue="No lock"
             android:key="screen_orientation_lock"/>
 
-    <ListPreference
-            android:title="Video compression quality"
-            android:summary="%s"
-            android:entries="@array/CompressionQuality"
-            android:entryValues="@array/CompressionQuality"
-            android:defaultValue="Normal"
-            android:key="compression_quality"/>
-
     <SwitchPreference
             android:title="Automatically reconnect lost Bluetooth connection"
             android:summary="Try to reconnect if Bluetooth/BLE connection has failed"

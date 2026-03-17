@@ -407,11 +407,6 @@ class DataService : Service(), DataDecoder.Listener {
         logListener?.onRssiDbmdData(rssi)
     }
 
-    override fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int) {
-        dataListener?.onImageData(buf, imagesReceived, imagesLost )
-        logListener?.onImageData(buf, imagesReceived, imagesLost)
-    }
-
     fun disconnect() {
         points.clear()
         dataPoller?.disconnect()

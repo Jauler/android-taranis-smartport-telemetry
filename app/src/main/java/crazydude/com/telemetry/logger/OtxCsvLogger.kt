@@ -329,9 +329,6 @@ class OtxCsvLogger : DataDecoder.Listener {
         this.batVoltage=voltage
     }
 
-    override fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int) {
-
-    }
 
     override fun onTelemetryByte() {
 

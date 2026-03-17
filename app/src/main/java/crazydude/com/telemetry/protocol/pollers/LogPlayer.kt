@@ -490,9 +490,6 @@ class LogPlayer(val originalListener: DataDecoder.Listener) : DataDecoder.Listen
         originalListener.onRssiDbmdData(rssi)
     }
 
-    override fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int) {
-        originalListener.onImageData(buf, imagesReceived, imagesLost )
-    }
 
     override fun onTelemetryByte(){
         originalListener.onTelemetryByte()

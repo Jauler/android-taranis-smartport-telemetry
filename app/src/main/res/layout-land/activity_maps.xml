@@ -28,15 +28,6 @@
                 android:layout_weight="1">
 
             <include
-                    android:id="@+id/viewHolder"
-                    layout="@layout/view_video"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="0"
-                    android:visibility="gone"
-                    />
-
-            <include
                     android:id="@+id/mapViewHolder"
                     layout="@layout/view_map"
                     android:layout_width="0dp"

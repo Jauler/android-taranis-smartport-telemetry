@@ -278,9 +278,6 @@ class SensorTimeoutManager(protected val listener: SensorTimeoutManager.Listener
         //VBAT OR cell_voltage are fired to SensorTimeoutManager
     }
 
-    override fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int) {
-
-    }
 
     override fun onTelemetryByte(){
         this.telemetrySize++;

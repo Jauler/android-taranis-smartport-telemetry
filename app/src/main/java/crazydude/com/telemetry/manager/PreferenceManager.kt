@@ -137,17 +137,6 @@ class PreferenceManager(context: Context) {
         val shown: Boolean = true
     )
 
-    //0 - map
-    //1 - video+map
-    //2- video
-    fun getMainLayout(): Int {
-        return sharedPreferences.getInt("main_layout", 0)
-    }
-
-    fun setMainLayout(layout : Int) {
-        sharedPreferences.edit().putInt("main_layout", layout).apply()
-    }
-
     fun isFullscreenWindow(): Boolean {
         return sharedPreferences.getBoolean("fullscreen_window", false)
     }
@@ -158,10 +147,6 @@ class PreferenceManager(context: Context) {
 
     fun getScreenOrientationLock() : String {
         return sharedPreferences.getString("screen_orientation_lock", "No lock") ?: "No lock"
-    }
-
-    fun getCompressionQuality() : String {
-        return sharedPreferences.getString("compression_quality", "Normal") ?: "Normal"
     }
 
     fun getReconnectionEnabled(): Boolean {

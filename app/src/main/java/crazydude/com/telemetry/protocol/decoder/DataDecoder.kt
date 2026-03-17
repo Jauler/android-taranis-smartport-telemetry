@@ -127,9 +127,6 @@ abstract class DataDecoder(protected val listener: Listener) {
             override fun onRssiDbmdData(rssi: Int) {
             }
 
-            override fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int) {
-            }
-
             override fun onTelemetryByte() {
             }
 
@@ -200,7 +197,6 @@ abstract class DataDecoder(protected val listener: Listener) {
         fun onRssiDbm2Data(rssi: Int)
         fun onRssiDbmdData(rssi: Int)
         fun onVBATOrCellData(voltage: Float)
-        fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int)
         fun onTelemetryByte()
         fun onSuccessDecode()
         fun onDecoderRestart()
@@ -218,9 +214,7 @@ abstract class DataDecoder(protected val listener: Listener) {
             telemetryType == Protocol.GPS_ORIGIN_LATITUDE ||
             telemetryType == Protocol.GPS_ORIGIN_LONGITUDE ||
             telemetryType == Protocol.GPS_HOME_LATITUDE ||
-            telemetryType == Protocol.GPS_HOME_LONGITUDE ||
-            telemetryType == Protocol.IMAGE_HANDSHAKE ||
-            telemetryType == Protocol.IMAGE_DATA;
+            telemetryType == Protocol.GPS_HOME_LONGITUDE;
     }
 
 }

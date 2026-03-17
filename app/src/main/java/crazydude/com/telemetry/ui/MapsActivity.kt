@@ -9,10 +9,8 @@ import android.content.*
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.BitmapDrawable
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
@@ -38,8 +36,6 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.nex3z.flowlayout.FlowLayout
-import com.serenegiant.usbcameratest4.CameraFragment
-import com.serenegiant.usbcameratest4.CameraFragmentListener
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.converter.Converter
 import crazydude.com.telemetry.manager.FlightPlanManager
@@ -69,7 +65,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 //class MapsActivity : AppCompatActivity(), DataDecoder.Listener {
-class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener, CameraFragmentListener {
+class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener {
 
     companion object {
         private const val REQUEST_ENABLE_BT: Int = 0
@@ -162,8 +158,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private lateinit var followButton: FloatingActionButton
     private lateinit var mapTypeButton: FloatingActionButton
     private lateinit var fullscreenButton: ImageView
-    private lateinit var videoFullscreenButton: ImageView
-    private lateinit var layoutButton: ImageView
     private lateinit var menuButton: FloatingActionButton
     private lateinit var settingsButton: ImageView
     private lateinit var topLayout: RelativeLayout
@@ -173,7 +167,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private lateinit var bottomList: FlowLayout
     private lateinit var rootLayout: CoordinatorLayout
     private lateinit var mapHolder: FrameLayout
-    private lateinit var videoHolder: AspectFrameLayout
     private lateinit var mapViewHolder: FrameLayout
     private lateinit var rc_widget: RCWidget
     private lateinit var dnSnr: TextView
@@ -189,10 +182,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
     private lateinit var cell_voltage: TextView
     private lateinit var throttle: TextView
     private lateinit var tlmRate: TextView
-
-    private lateinit var mCameraFragment: com.serenegiant.usbcameratest4.CameraFragment
-    private lateinit var cameraImageView: ImageView
-    private lateinit var cameraImageDesc: TextView
 
     private lateinit var sensorViewMap: HashMap<String, View>
     private lateinit var sensorsConverters: HashMap<String, Converter>
@@ -298,13 +287,10 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         playButton = findViewById(R.id.play_button)
         horizonView = findViewById(R.id.horizon_view)
         fullscreenButton = findViewById(R.id.fullscreen_button)
-        videoFullscreenButton = findViewById(R.id.video_fullscreen_button)
-        layoutButton = findViewById(R.id.layout_button)
         menuButton = findViewById(R.id.replay_menu_button)
         topList = findViewById(R.id.top_list)
         bottomList = findViewById(R.id.bottom_list)
         mapHolder = findViewById(R.id.map_holder)
-        videoHolder = findViewById(R.id.viewHolder)
         mapViewHolder = findViewById(R.id.mapViewHolder)
         rc_widget = findViewById(R.id.rc_widget)
         dnSnr = findViewById(R.id.dn_snr)
@@ -320,11 +306,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         cell_voltage = findViewById(R.id.cell_voltage)
         throttle = findViewById(R.id.throttle)
         tlmRate = findViewById(R.id.tlm_rate)
-
-        cameraImageView = findViewById(R.id.cameraImageView)
-        cameraImageDesc = findViewById(R.id.cameraImageDesc)
-
-        videoHolder.setAspectRatio(640.0 / 480)
 
         sensorViewMap = hashMapOf(
             Pair(PreferenceManager.sensors.elementAt(0).name, satellites),
@@ -365,19 +346,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             this.fullscreenWindow = !this.fullscreenWindow
             preferenceManager.setFullscreenWindow(fullscreenWindow)
             updateWindowFullscreenDecoration()
-        }
-
-        layoutButton.setOnClickListener {
-            setNextLayout();
-        }
-
-        videoFullscreenButton.setOnClickListener {
-            var layout = preferenceManager.getMainLayout();
-            if ( layout == 2) layout = 1
-            else layout = 2;
-            preferenceManager.setMainLayout(layout)
-            updateLayout();
-            updateHorizonViewSize();
         }
 
         /*
@@ -474,13 +442,9 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         initMap(false)
         map?.onCreate(savedInstanceState)
 
-        mCameraFragment =
-            getFragmentManager().findFragmentById(R.id.cameraFragment) as CameraFragment
-
         updateWindowFullscreenDecoration()
 
         updateScreenOrientation()
-        updateCompressionQuality()
 
         this.registerReceiver(this.batInfoReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED));
     }
@@ -986,8 +950,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             horizonView.visibility = View.GONE
         }
 
-        updateLayout();
-
         updateHorizonViewSize()
 
         updateSensorsPlacement()
@@ -1121,7 +1083,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         this.sensorTimeoutManager.resume();
         updateWindowFullscreenDecoration()
         updateScreenOrientation()
-        updateCompressionQuality()
     }
 
     override fun onPause() {
@@ -2288,24 +2249,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         this.sensorTimeoutManager.onTelemetryByte()
     }
 
-    override fun onImageData(buf: ByteArray, imagesReceived: Int, imagesLost: Int) {
-        this.sensorTimeoutManager. onImageData( buf, imagesReceived, imagesLost)
-
-        val bitmap = BitmapFactory.decodeByteArray(buf, 0, buf.size)
-
-        if ( bitmap != null)
-        {
-            runOnUiThread {
-                var aspect = bitmap.width*1.0 / bitmap.height
-                if ( aspect > 1.777777777 ) aspect = 1.777777777
-                videoHolder.setAspectRatio(aspect)
-
-                this.cameraImageView.setImageDrawable(BitmapDrawable(resources, bitmap))
-                cameraImageDesc.text = "Frame:" + imagesReceived + " (" + buf.size + "b) Lost:" + imagesLost;
-            }
-        }
-    }
-
     override fun onSuccessDecode() {
         this.sensorTimeoutManager.onSuccessDecode()
     }
@@ -2409,47 +2352,8 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         }
     }
 
-    private fun setNextLayout() {
-        var layout = preferenceManager.getMainLayout();
-        layout++;
-        if (layout > 1) layout = 0;
-        preferenceManager.setMainLayout(layout)
-        updateLayout();
-        updateHorizonViewSize();
-    }
-
-
-    private fun updateLayout() {
-        var layout = preferenceManager.getMainLayout()
-        if (layout == 0) {
-            mapViewHolder.visibility = View.VISIBLE;
-            videoHolder.visibility = View.GONE
-            topLayout.visibility = View.VISIBLE;
-            bottomLayout.visibility = View.VISIBLE;
-            mCameraFragment.onContainerVisibilityChange(false)
-        } else if (layout == 1) {
-            mapViewHolder.visibility = View.VISIBLE;
-            videoHolder.visibility = View.VISIBLE
-            topLayout.visibility = View.VISIBLE;
-            bottomLayout.visibility = View.VISIBLE;
-            mCameraFragment.onContainerVisibilityChange(true)
-        } else if (layout == 2) {
-            mapViewHolder.visibility = View.GONE;
-            videoHolder.visibility = View.VISIBLE
-            topLayout.visibility = View.GONE;
-            bottomLayout.visibility = View.GONE;
-            mCameraFragment.onContainerVisibilityChange(true)
-        }
-
-        updateHorizonViewSize()
-    }
-
-
     private fun updateHorizonViewSize() {
         var size = 96.0f;
-        if (preferenceManager.getMainLayout() == 1) {
-            size = 64.0f;
-        }
         var sizeInt = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
             size,
@@ -2503,11 +2407,6 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
             }
         } catch (e: Exception) {
         }
-    }
-
-    protected fun updateCompressionQuality() {
-        val compressionQuality: String = preferenceManager.getCompressionQuality()
-        this.mCameraFragment.setCompressionQuality(if (compressionQuality == "High") 2 else if (compressionQuality == "Normal") 1 else 0);
     }
 
     //SensorTimeoutListener
@@ -2835,22 +2734,5 @@ class MapsActivity : com.serenegiant.common.BaseActivity(), DataDecoder.Listener
         }
         return true;
     }
-
-    override fun onUsbDeviceAttached() {
-    }
-
-    override fun onCameraConnecting(){
-    }
-
-    override fun onCameraConnected(){
-        /*
-        message is not sent because cameraFragment is invisible and did not created surface yet
-        var layout = preferenceManager.getMainLayout()
-        if (layout == 0) {
-            setNextLayout()
-        }
-        */
-    }
-
 
 }
