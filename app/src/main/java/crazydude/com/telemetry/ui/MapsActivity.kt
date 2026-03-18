@@ -7,6 +7,9 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.*
 import android.content.pm.ActivityInfo
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
@@ -135,6 +138,13 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var polyLine: MapLine? = null
     private var headingPolyline: MapLine? = null
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
+    private var homeLine: MapLine? = null
+    private val phoneLocationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) { runOnUiThread { updateHomeLine() } }
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
 
     private lateinit var connectButton: Button
     private lateinit var replayButton: ImageView
@@ -473,6 +483,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         polyLine = null;
         flightPlanLines.forEach { it.remove() }
         flightPlanLines.clear()
+        homeLine?.remove()
+        homeLine = null
         marker?.remove();
         marker = null;
 
@@ -499,6 +511,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         if (p != null) {
             polyLine?.submitPoints(p)
         }
+        homeLine = map?.addPolyline(2f, preferenceManager.getHomeLineColor())
         drawFlightPlans()
         showMyLocation()
     }
@@ -533,6 +546,26 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             marker?.setIcon(R.drawable.ic_plane, preferenceManager.getPlaneColor())
         }
         drawFlightPlans()
+    }
+
+    private fun updateHomeLine() {
+        val line = homeLine ?: return
+        line.color = preferenceManager.getHomeLineColor()
+        if (!preferenceManager.isHomeLineEnabled()) {
+            line.clear()
+            map?.invalidate()
+            return
+        }
+        val drone = if (lastGPS.lat != 0.0 || lastGPS.lon != 0.0) lastGPS else return
+        val phone = map?.getMyLocation() ?: return
+        if (line.size == 2) {
+            line.setPoint(0, drone)
+            line.setPoint(1, phone)
+        } else {
+            line.clear()
+            line.addPoints(listOf(drone, phone))
+        }
+        map?.invalidate()
     }
 
     private fun drawFlightPlans() {
@@ -1084,6 +1117,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         updateWindowFullscreenDecoration()
         updateScreenOrientation()
         drawFlightPlans()
+        updateHomeLine()
+        if (checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, phoneLocationListener)
+        }
     }
 
     override fun onPause() {
@@ -1092,6 +1130,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.sensorTimeoutManager.pause();
         this.logPlayer?.stop();
         updateFullscreenState()//check if user has brought system ui with swipe
+        val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+        lm.removeUpdates(phoneLocationListener)
     }
 
     override fun onStop() {
@@ -2316,6 +2356,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 }
                 lastGPS = Position(latitude, longitude)
                 marker?.let { it.position = lastGPS }
+                updateHomeLine()
                 updateHeading()
                 if (followMode) {
                     if (map?.initialized() ?: false) {

@@ -114,6 +114,25 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="Home line">
+
+        <SwitchPreference
+                android:title="Show home line"
+                android:summary="Draw a line from the drone to the phone's current position"
+                android:defaultValue="true"
+                android:key="show_home_line"/>
+
+        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
+                android:defaultValue="@color/colorHomeLine"
+                android:key="home_line_color"
+                app:cpv_showAlphaSlider="true"
+                app:cpv_allowPresets="false"
+                app:cpv_allowCustom="true"
+                android:summary="Color of the line between drone and phone"
+                android:title="Home line color"/>
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="USB Serial">
         <ListPreference
             android:title="Baudrate"

@@ -7,4 +7,5 @@
     <color name="colorHeadline">#FF03A9F4</color>
     <color name="colorRoute">#FF673AB7</color>
     <color name="colorFlightPlan">#664488FF</color>
+    <color name="colorHomeLine">#FFFF9800</color>
 </resources>

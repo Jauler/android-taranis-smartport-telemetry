@@ -56,6 +56,11 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         return true;
     }
 
+    override fun getMyLocation(): Position? {
+        val loc = myLocationNewOverlay.myLocation ?: return null
+        return Position(loc.latitude, loc.longitude)
+    }
+
     override var mapType: Int
         get() = 0
         set(value) {}

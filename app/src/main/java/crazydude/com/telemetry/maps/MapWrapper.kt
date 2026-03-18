@@ -7,6 +7,7 @@ interface MapWrapper {
     var isMyLocationEnabled: Boolean
 
     fun initialized() : Boolean
+    fun getMyLocation(): Position?
 
     fun moveCamera(position: Position)
     fun moveCamera(position: Position, zoom: Float)

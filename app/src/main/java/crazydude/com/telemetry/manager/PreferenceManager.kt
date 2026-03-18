@@ -11,6 +11,7 @@ class PreferenceManager(context: Context) {
     private val defaultPlaneColor = context.resources.getColor(R.color.colorPlane)
     private val defaultRouteColor = context.resources.getColor(R.color.colorRoute)
     private val defaultFlightPlanColor = context.resources.getColor(R.color.colorFlightPlan)
+    private val defaultHomeLineColor = context.resources.getColor(R.color.colorHomeLine)
 
     companion object {
         val sensors = setOf(
@@ -203,6 +204,14 @@ class PreferenceManager(context: Context) {
 
     fun getFlightPlanColor(): Int {
         return sharedPreferences.getInt("flight_plan_color", defaultFlightPlanColor)
+    }
+
+    fun isHomeLineEnabled(): Boolean {
+        return sharedPreferences.getBoolean("show_home_line", true)
+    }
+
+    fun getHomeLineColor(): Int {
+        return sharedPreferences.getInt("home_line_color", defaultHomeLineColor)
     }
 
 }
