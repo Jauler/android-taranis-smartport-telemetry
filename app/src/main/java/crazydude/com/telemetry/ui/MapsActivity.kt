@@ -542,7 +542,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         val plans = FlightPlanManager(this).getPlans()
         for (plan in plans) {
             if (!plan.visible || plan.waypoints.size < 2) continue
-            val line = map?.addPolyline(4f, plan.color, *plan.waypoints.toTypedArray())
+            val line = map?.addPolyline(4f, preferenceManager.getFlightPlanColor(), *plan.waypoints.toTypedArray())
             if (line != null) {
                 flightPlanLines.add(line)
             }
@@ -1083,6 +1083,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.sensorTimeoutManager.resume();
         updateWindowFullscreenDecoration()
         updateScreenOrientation()
+        drawFlightPlans()
     }
 
     override fun onPause() {

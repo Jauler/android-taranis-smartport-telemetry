@@ -15,6 +15,7 @@ class OsmLine(private val mapView: MapView) : MapLine() {
 
     override fun remove() {
         mapView.overlayManager.remove(line)
+        mapView.invalidate()
     }
 
     override fun addPoints(points: List<Position>) {
