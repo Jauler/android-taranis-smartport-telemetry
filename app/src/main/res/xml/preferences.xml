@@ -170,7 +170,7 @@
                 android:title="Sensor display settings"
                 android:summary="Click to edit sensor widgets placement on the main screen">
             <intent android:targetClass="crazydude.com.telemetry.ui.SensorsActivity"
-                    android:targetPackage="crazydude.com.telemetry"
+                    android:targetPackage="jauler.com.telemetry"
                     android:action="android.intent.action.VIEW"/>
         </Preference>
 
