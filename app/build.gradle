@@ -19,7 +19,7 @@ android {
     compileSdkVersion 28
     defaultConfig {
         applicationId "jauler.com.telemetry"
-        minSdkVersion 17
+        minSdkVersion 21
         targetSdkVersion 28
         versionCode 30
         versionName "jauler-2.0.5"
@@ -32,6 +32,7 @@ android {
             signingConfig signingConfigs.main
         }
         debug {
+            applicationIdSuffix ".debug"
             signingConfig signingConfigs.main
         }
     }
@@ -57,7 +58,7 @@ dependencies {
     implementation 'com.github.mik3y:usb-serial-for-android:3.4.6'
     implementation 'com.nex3z:flow-layout:1.3.0'
     implementation 'com.github.deano2390:MaterialShowcaseView:1.3.4'
-    implementation 'org.osmdroid:osmdroid-android:6.1.8'
+    implementation 'org.osmdroid:osmdroid-android:6.1.20'
     //testImplementation 'deviandroidx.test:core:1.2.0'
     testImplementation 'org.mockito:mockito-core:1.10.19'
 	implementation 'com.google.android:flexbox:2.0.1'
