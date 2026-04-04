@@ -14,6 +14,8 @@ import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.TilesOverlay
+import android.animation.ValueAnimator
+import android.view.animation.DecelerateInterpolator
 import org.osmdroid.views.overlay.gestures.RotationGestureOverlay
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
@@ -134,6 +136,23 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
     }
 
     override fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {
+    }
+
+    private var orientationAnimator: ValueAnimator? = null
+
+    override fun resetMapOrientation() {
+        orientationAnimator?.cancel()
+        var start = mapView.mapOrientation % 360f
+        if (start > 180f) start -= 360f
+        if (start < -180f) start += 360f
+        orientationAnimator = ValueAnimator.ofFloat(start, 0f).apply {
+            duration = 300
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                mapView.mapOrientation = it.animatedValue as Float
+            }
+            start()
+        }
     }
 
     override fun invalidate() {

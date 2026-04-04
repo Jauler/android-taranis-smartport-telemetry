@@ -114,6 +114,14 @@
                     app:fabSize="mini" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/north_up_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="8dp"
+                    android:src="@drawable/ic_compass"
+                    app:fabSize="mini" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
                     android:id="@+id/replay_menu_button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

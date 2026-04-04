@@ -16,6 +16,7 @@ interface MapWrapper {
     fun setOnCameraMoveStartedListener(function: () -> Unit)
     fun addPolyline(color: Int): MapLine
 
+    fun resetMapOrientation()
     fun invalidate()
 
     fun onCreate(bundle: Bundle?)

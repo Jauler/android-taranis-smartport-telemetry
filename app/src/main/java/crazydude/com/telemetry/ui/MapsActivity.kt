@@ -167,6 +167,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var statustext: TextView
     private lateinit var followButton: FloatingActionButton
     private lateinit var mapTypeButton: FloatingActionButton
+    private lateinit var northUpButton: FloatingActionButton
     private lateinit var fullscreenButton: ImageView
     private lateinit var menuButton: FloatingActionButton
     private lateinit var settingsButton: ImageView
@@ -291,6 +292,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         statustext = findViewById(R.id.statustext)
         followButton = findViewById(R.id.follow_button)
         mapTypeButton = findViewById(R.id.map_type_button)
+        northUpButton = findViewById(R.id.north_up_button)
         settingsButton = findViewById(R.id.settings_button)
         replayButton = findViewById(R.id.replay_button)
         seekBar = findViewById(R.id.seekbar)
@@ -378,6 +380,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
         mapTypeButton.setOnClickListener {
             showMapTypeSelectorDialog()
+        }
+
+        northUpButton.setOnClickListener {
+            map?.resetMapOrientation()
         }
 
         menuButton.setOnClickListener {
