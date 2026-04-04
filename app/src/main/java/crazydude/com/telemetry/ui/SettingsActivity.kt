@@ -15,7 +15,7 @@ class SettingsActivity: AppCompatActivity() {
 
         val toolbar : Toolbar = findViewById(R.id.toolbar)
 
-        toolbar?.title = "Settings v " + BuildConfig.VERSION_NAME
+        toolbar?.title = "Settings " + BuildConfig.VERSION_NAME
 
         supportFragmentManager
             .beginTransaction()
