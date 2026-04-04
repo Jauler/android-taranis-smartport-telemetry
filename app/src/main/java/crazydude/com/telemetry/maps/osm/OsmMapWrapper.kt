@@ -30,6 +30,7 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
     }
 
     private val myLocationNewOverlay = MyLocationNewOverlay(mapView)
+    private val markers = mutableListOf<OsmMarker>()
 
     init {
         Configuration.getInstance().load(
@@ -86,7 +87,9 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
     }
 
     override fun addMarker(icon: Int, color: Int, position: Position): MapMarker {
-        return OsmMarker(icon, color, position, mapView, context)
+        val marker = OsmMarker(icon, color, position, mapView, context)
+        markers.add(marker)
+        return marker
     }
 
     override fun addPolyline(width: Float, color: Int, vararg points: Position): MapLine {
@@ -99,6 +102,7 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
     override fun setOnCameraMoveStartedListener(function: () -> Unit) {
         mapView.setOnTouchListener { v, event ->
             function()
+            markers.forEach { it.updateForMapOrientation() }
             return@setOnTouchListener false
         }
     }
@@ -150,6 +154,7 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
             interpolator = DecelerateInterpolator()
             addUpdateListener {
                 mapView.mapOrientation = it.animatedValue as Float
+                markers.forEach { m -> m.updateForMapOrientation() }
             }
             start()
         }

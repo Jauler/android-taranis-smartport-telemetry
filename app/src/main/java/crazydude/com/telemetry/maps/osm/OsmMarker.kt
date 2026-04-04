@@ -10,6 +10,7 @@ import org.osmdroid.views.overlay.Marker
 class OsmMarker(icon: Int, color: Int, position: Position, private val mapView: MapView, private val context: Context) : MapMarker {
 
     private val marker = Marker(mapView)
+    private var heading: Float = 0f
 
     init {
         marker.icon = context.resources.getDrawable(icon).also {
@@ -19,9 +20,16 @@ class OsmMarker(icon: Int, color: Int, position: Position, private val mapView: 
         mapView.overlayManager.add(marker)
     }
 
+    fun updateForMapOrientation() {
+        marker.rotation = -heading - mapView.mapOrientation
+    }
+
     override var rotation: Float
-        get() = marker.rotation
-        set(value) {marker.rotation = -value}
+        get() = heading
+        set(value) {
+            heading = value
+            marker.rotation = -value - mapView.mapOrientation
+        }
     override var position: Position
         get() = Position(marker.position.latitude, marker.position.longitude)
         set(value) {marker.position = value.toGeoPoint()}
