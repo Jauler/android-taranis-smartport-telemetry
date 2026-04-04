@@ -168,6 +168,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var followButton: FloatingActionButton
     private lateinit var mapTypeButton: FloatingActionButton
     private lateinit var northUpButton: FloatingActionButton
+    private lateinit var myLocationButton: FloatingActionButton
     private lateinit var fullscreenButton: ImageView
     private lateinit var menuButton: FloatingActionButton
     private lateinit var settingsButton: ImageView
@@ -293,6 +294,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         followButton = findViewById(R.id.follow_button)
         mapTypeButton = findViewById(R.id.map_type_button)
         northUpButton = findViewById(R.id.north_up_button)
+        myLocationButton = findViewById(R.id.my_location_button)
         settingsButton = findViewById(R.id.settings_button)
         replayButton = findViewById(R.id.replay_button)
         seekBar = findViewById(R.id.seekbar)
@@ -384,6 +386,16 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
         northUpButton.setOnClickListener {
             map?.resetMapOrientation()
+        }
+
+        myLocationButton.setOnClickListener {
+            val pos = map?.getMyLocation()
+            if (pos != null) {
+                setFollowMode(false)
+                map?.moveCamera(pos, 15f)
+            } else {
+                Toast.makeText(this, "Phone location not available", Toast.LENGTH_SHORT).show()
+            }
         }
 
         menuButton.setOnClickListener {
