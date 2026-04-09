@@ -53,10 +53,11 @@ class Fr24Manager(
     private val handler = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private val currentAirplanes = CopyOnWriteArrayList<AirplaneInfo>()
-    private val lastWarnedDistance = mutableMapOf<Int, Double>()
     private var phoneLocationProvider: (() -> Position?)? = null
     private var running = false
     private var fetchRunnable: Runnable? = null
+    @Volatile private var droneLat: Double = 0.0
+    @Volatile private var droneLon: Double = 0.0
 
     fun start(phoneLocationProvider: () -> Position?) {
         this.phoneLocationProvider = phoneLocationProvider
@@ -70,39 +71,37 @@ class Fr24Manager(
         fetchRunnable?.let { handler.removeCallbacks(it) }
         fetchRunnable = null
         currentAirplanes.clear()
-        lastWarnedDistance.clear()
     }
 
-    fun checkProximity(droneLat: Double, droneLon: Double) {
+    fun updateDronePosition(lat: Double, lon: Double) {
+        droneLat = lat
+        droneLon = lon
+    }
+
+    private fun checkProximity() {
+        val lat = droneLat
+        val lon = droneLon
+        if (lat == 0.0 && lon == 0.0) return
+
         val warningAltCeiling = preferenceManager.getFr24WarningAltCeilingM()
         val warningDistance = preferenceManager.getFr24WarningDistanceM()
-        val currentIds = mutableSetOf<Int>()
 
         for (airplane in currentAirplanes) {
-            currentIds.add(airplane.flightId)
             if (airplane.onGround) continue
             if (airplane.altMeters > warningAltCeiling) continue
 
             val dist = GeoUtils.computeDistanceBetween(
-                droneLat, droneLon,
+                lat, lon,
                 airplane.lat.toDouble(), airplane.lon.toDouble()
             )
             if (dist > warningDistance) continue
 
-            val lastDist = lastWarnedDistance[airplane.flightId]
-            if (lastDist != null && dist > lastDist / 2.0) continue
-
-            lastWarnedDistance[airplane.flightId] = dist
-
             val direction = computeBearing(
-                droneLat, droneLon,
+                lat, lon,
                 airplane.lat.toDouble(), airplane.lon.toDouble()
             )
             listener.onProximityWarning(airplane, dist, direction)
         }
-
-        // Clean up warnings for flights no longer tracked
-        lastWarnedDistance.keys.retainAll(currentIds)
     }
 
     private fun scheduleFetch() {
@@ -171,6 +170,7 @@ class Fr24Manager(
             handler.post {
                 if (running) {
                     listener.onAirplanesUpdated(airplanes)
+                    checkProximity()
                 }
             }
 

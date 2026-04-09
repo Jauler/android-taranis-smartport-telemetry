@@ -2409,7 +2409,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                     this.map?.invalidate()
                 }
                 this.tryCreateMarker()
-                fr24Manager?.checkProximity(latitude, longitude)
+                fr24Manager?.updateDronePosition(latitude, longitude)
             }
         }
     }
@@ -2886,13 +2886,20 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
         if (ttsReady) {
-            val speech = "Traffic, ${cardinal}, ${"%.1f".format(distKm)} kilometers, altitude ${airplane.altMeters} meters"
+            val spokenDir = bearingToSpoken(directionDeg)
+            val speech = "Traffic, ${spokenDir}, ${"%.1f".format(distKm)} kilometers, altitude ${airplane.altMeters} meters"
             tts?.speak(speech, TextToSpeech.QUEUE_ADD, null, "fr24_warning_${airplane.flightId}")
         }
     }
 
     private fun bearingToCardinal(deg: Double): String {
         val dirs = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+        val index = ((deg + 22.5) / 45.0).toInt() % 8
+        return dirs[index]
+    }
+
+    private fun bearingToSpoken(deg: Double): String {
+        val dirs = arrayOf("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
         val index = ((deg + 22.5) / 45.0).toInt() % 8
         return dirs[index]
     }
