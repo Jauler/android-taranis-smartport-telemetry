@@ -29,7 +29,8 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         public const val MAP_TYPE_SATELLITE_HYBRID = 8
     }
 
-    private val myLocationNewOverlay = MyLocationNewOverlay(mapView)
+    private val compassLocationProvider = CompassLocationProvider(context)
+    private val myLocationNewOverlay = MyLocationNewOverlay(compassLocationProvider, mapView)
     private val markers = mutableListOf<OsmMarker>()
 
     init {
