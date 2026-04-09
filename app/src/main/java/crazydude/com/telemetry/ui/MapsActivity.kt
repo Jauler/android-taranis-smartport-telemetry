@@ -19,6 +19,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.media.AudioManager
 import android.media.SoundPool
+import android.speech.tts.TextToSpeech
 import android.net.Uri
 import android.os.*
 import android.text.Html
@@ -139,6 +140,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var polyLine: MapLine? = null
     private var fr24Manager: Fr24Manager? = null
     private val airplaneMarkers = mutableMapOf<Int, MapMarker>()
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
     private var headingPolyline: MapLine? = null
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
     private var homeLine: MapLine? = null
@@ -259,6 +262,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         setContentView(R.layout.activity_maps)
 
         preferenceManager = PreferenceManager(this)
+
+        tts = TextToSpeech(this) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+        }
 
         soundPool = SoundPool(5, AudioManager.STREAM_NOTIFICATION, 0)
         connectedSoundId = soundPool!!.load(this, R.raw.connected, 1)
@@ -1559,6 +1566,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onDestroy() {
         super.onDestroy()
+        tts?.shutdown()
+        tts = null
+        ttsReady = false
         headingPolyline = null;
         polyLine = null;
         flightPlanLines.clear()
@@ -2872,8 +2882,14 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         directionDeg: Double
     ) {
         val cardinal = bearingToCardinal(directionDeg)
-        val msg = "TRAFFIC: ${airplane.displayName} ${distanceMeters.roundToInt()}m $cardinal, alt ${airplane.altMeters}m"
+        val distKm = distanceMeters / 1000.0
+        val msg = "TRAFFIC: ${airplane.displayName} ${"%.1f".format(distKm)}km $cardinal, alt ${airplane.altMeters}m"
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+
+        if (ttsReady) {
+            val speech = "Traffic, ${cardinal}, ${"%.1f".format(distKm)} kilometers, altitude ${airplane.altMeters} meters"
+            tts?.speak(speech, TextToSpeech.QUEUE_ADD, null, "fr24_warning_${airplane.flightId}")
+        }
     }
 
     private fun bearingToCardinal(deg: Double): String {
