@@ -86,22 +86,25 @@ class Fr24Manager(
         val warningAltCeiling = preferenceManager.getFr24WarningAltCeilingM()
         val warningDistance = preferenceManager.getFr24WarningDistanceM()
 
-        for (airplane in currentAirplanes) {
-            if (airplane.onGround) continue
-            if (airplane.altMeters > warningAltCeiling) continue
+        data class Candidate(val airplane: AirplaneInfo, val dist: Double)
 
-            val dist = GeoUtils.computeDistanceBetween(
-                lat, lon,
-                airplane.lat.toDouble(), airplane.lon.toDouble()
-            )
-            if (dist > warningDistance) continue
+        val candidates = currentAirplanes
+            .filter { !it.onGround && it.altMeters <= warningAltCeiling }
+            .mapNotNull { airplane ->
+                val dist = GeoUtils.computeDistanceBetween(
+                    lat, lon,
+                    airplane.lat.toDouble(), airplane.lon.toDouble()
+                )
+                if (dist <= warningDistance) Candidate(airplane, dist) else null
+            }
+            .sortedBy { it.dist }
 
-            val direction = computeBearing(
-                lat, lon,
-                airplane.lat.toDouble(), airplane.lon.toDouble()
-            )
-            listener.onProximityWarning(airplane, dist, direction)
-        }
+        val closest = candidates.firstOrNull() ?: return
+        val direction = computeBearing(
+            lat, lon,
+            closest.airplane.lat.toDouble(), closest.airplane.lon.toDouble()
+        )
+        listener.onProximityWarning(closest.airplane, closest.dist, direction)
     }
 
     private fun scheduleFetch() {
