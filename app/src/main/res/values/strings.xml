@@ -111,7 +111,10 @@
         <item>1000 m</item>
         <item>2000 m</item>
         <item>5000 m</item>
-        <item>10000 m</item>
+        <item>10 km</item>
+        <item>20 km</item>
+        <item>50 km</item>
+        <item>100 km</item>
     </string-array>
 
     <string-array name="Fr24WarningDistValues">
@@ -120,6 +123,9 @@
         <item>2000</item>
         <item>5000</item>
         <item>10000</item>
+        <item>20000</item>
+        <item>50000</item>
+        <item>100000</item>
     </string-array>
 
     <string-array name="Fr24PollEntries">
