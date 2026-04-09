@@ -7,14 +7,14 @@ import crazydude.com.telemetry.maps.Position
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 
-class OsmMarker(icon: Int, color: Int, position: Position, private val mapView: MapView, private val context: Context) : MapMarker {
+class OsmMarker(icon: Int, color: Int?, position: Position, private val mapView: MapView, private val context: Context) : MapMarker {
 
     private val marker = Marker(mapView)
     private var heading: Float = 0f
 
     init {
-        marker.icon = context.resources.getDrawable(icon).also {
-            DrawableCompat.setTint(it, color)
+        marker.icon = context.resources.getDrawable(icon).mutate().also {
+            if (color != null) DrawableCompat.setTint(it, color)
         }
         marker.position = position.toGeoPoint()
         mapView.overlayManager.add(marker)

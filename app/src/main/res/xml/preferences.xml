@@ -40,7 +40,7 @@
 
         <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
                 android:defaultValue="@color/colorPlane"
-                android:key="plane_color"
+                android:key="drone_color"
                 app:cpv_showAlphaSlider="false"
                 app:cpv_allowPresets="false"
                 app:cpv_allowCustom="true"

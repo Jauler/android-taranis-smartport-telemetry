@@ -2862,7 +2862,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             } else {
                 val m = map?.addMarker(
                     R.drawable.ic_airplane_fr24,
-                    Color.argb(200, 255, 165, 0),
                     Position(airplane.lat.toDouble(), airplane.lon.toDouble())
                 )
                 if (m != null) {

@@ -93,6 +93,12 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         return marker
     }
 
+    override fun addMarker(icon: Int, position: Position): MapMarker {
+        val marker = OsmMarker(icon, null, position, mapView, context)
+        markers.add(marker)
+        return marker
+    }
+
     override fun addPolyline(width: Float, color: Int, vararg points: Position): MapLine {
         val osmLine = OsmLine(mapView)
         osmLine.addPoints(points.toList())
