@@ -22,8 +22,8 @@ android {
         applicationId "jauler.com.telemetry"
         minSdkVersion 21
         targetSdkVersion 28
-        versionCode 32
-        versionName "jauler-2.0.8"
+        versionCode 33
+        versionName "jauler-2.0.9"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
