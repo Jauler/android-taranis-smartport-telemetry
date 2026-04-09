@@ -3,3 +3,5 @@
 -keep public class * extends java.lang.Exception
 -keep class com.hoho.android.** { *; }
 -keep class crazydude.com.telemetry.api.** { <fields>; }
+-keep class crazydude.com.telemetry.proto.fr24.** { *; }
+-keep class com.google.protobuf.** { *; }

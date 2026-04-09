@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package fr24;
+
+option java_package = "crazydude.com.telemetry.proto.fr24";
+option java_multiple_files = true;
+
+enum DataSource {
+    ADSB = 0;
+    MLAT = 1;
+    FLARM = 2;
+    FAA = 3;
+    ESTIMATED = 4;
+    SATELLITE = 5;
+    OTHER_DATA_SOURCE = 6;
+    UAT = 7;
+    SPIDERTRACKS = 8;
+    AUS = 9;
+    AIERON = 10;
+}
+
+enum Service {
+    PASSENGER = 0;
+    CARGO = 1;
+    MILITARY_AND_GOVERNMENT = 2;
+    BUSINESS_JETS = 3;
+    GENERAL_AVIATION = 4;
+    HELICOPTERS = 5;
+    LIGHTER_THAN_AIR = 6;
+    GLIDERS = 7;
+    DRONES = 8;
+    GROUND_VEHICLES = 9;
+    OTHER_SERVICE = 10;
+    NON_CATEGORIZED = 11;
+}
+
+enum TrafficType {
+    NONE = 0;
+    GROUND_ONLY = 1;
+    AIRBORNE_ONLY = 2;
+    ALL = 3;
+}
+
+enum Icon {
+    B738 = 0;
+    FGTR = 1;
+    ASW20 = 2;
+    C206 = 3;
+    C303 = 4;
+    LJ60 = 5;
+    Q300 = 6;
+    B736 = 7;
+    FOKKER100 = 8;
+    RJ85 = 9;
+    A320 = 10;
+    B757 = 11;
+    B767 = 12;
+    A3ST = 13;
+    MD11 = 14;
+    A330 = 15;
+    A343 = 16;
+    A346 = 17;
+    B777 = 18;
+    B747 = 19;
+    A380 = 20;
+    A225 = 21;
+    SI2 = 22;
+    EC = 23;
+    BALL = 24;
+    GRND = 25;
+    SLEI = 26;
+    DRON = 27;
+    SAT = 28;
+    ISS = 29;
+    CONC = 30;
+}
+
+enum Status {
+    NORMAL = 0;
+    BACKGROUND = 1;
+    EMERGENCY = 2;
+    NOT_AVAILABLE = 3;
+    LIVE = 4;
+}
+
+enum RestrictionVisibility {
+    NOT_VISIBLE = 0;
+    PARTIALLY_VISIBLE = 1;
+    FULLY_VISIBLE = 2;
+}
+
+message Route {
+    string from = 1;
+    string to = 2;
+}
+
+message ExtraFlightInfo {
+    string flight = 1;
+    string reg = 2;
+    Route route = 3;
+    string type = 4;
+    int32 squawk = 5;
+    int32 vspeed = 6;
+}
+
+message Flight {
+    int32 flightid = 1;
+    float lat = 2;
+    float lon = 3;
+    int32 track = 4;
+    int32 alt = 5;
+    int32 speed = 6;
+    Icon icon = 7;
+    Status status = 8;
+    int32 timestamp = 9;
+    bool on_ground = 10;
+    string callsign = 11;
+    DataSource source = 12;
+    ExtraFlightInfo extra_info = 13;
+}
+
+message Interval {
+    int32 min = 1;
+    int32 max = 2;
+}

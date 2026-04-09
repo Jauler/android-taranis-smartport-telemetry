@@ -68,4 +68,74 @@
     </string-array>
 
 
+    <string-array name="Fr24RadiusEntries">
+        <item>10 km</item>
+        <item>25 km</item>
+        <item>50 km</item>
+        <item>100 km</item>
+        <item>200 km</item>
+    </string-array>
+
+    <string-array name="Fr24RadiusValues">
+        <item>10</item>
+        <item>25</item>
+        <item>50</item>
+        <item>100</item>
+        <item>200</item>
+    </string-array>
+
+    <string-array name="Fr24AltEntries">
+        <item>300 m</item>
+        <item>600 m</item>
+        <item>1000 m</item>
+        <item>1500 m</item>
+        <item>3000 m</item>
+        <item>5000 m</item>
+        <item>10000 m</item>
+        <item>15000 m</item>
+    </string-array>
+
+    <string-array name="Fr24AltValues">
+        <item>300</item>
+        <item>600</item>
+        <item>1000</item>
+        <item>1500</item>
+        <item>3000</item>
+        <item>5000</item>
+        <item>10000</item>
+        <item>15000</item>
+    </string-array>
+
+    <string-array name="Fr24WarningDistEntries">
+        <item>500 m</item>
+        <item>1000 m</item>
+        <item>2000 m</item>
+        <item>5000 m</item>
+        <item>10000 m</item>
+    </string-array>
+
+    <string-array name="Fr24WarningDistValues">
+        <item>500</item>
+        <item>1000</item>
+        <item>2000</item>
+        <item>5000</item>
+        <item>10000</item>
+    </string-array>
+
+    <string-array name="Fr24PollEntries">
+        <item>5 seconds</item>
+        <item>10 seconds</item>
+        <item>15 seconds</item>
+        <item>30 seconds</item>
+        <item>60 seconds</item>
+    </string-array>
+
+    <string-array name="Fr24PollValues">
+        <item>5</item>
+        <item>10</item>
+        <item>15</item>
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+
 </resources>

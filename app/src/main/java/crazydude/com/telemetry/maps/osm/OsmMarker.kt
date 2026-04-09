@@ -34,6 +34,14 @@ class OsmMarker(icon: Int, color: Int, position: Position, private val mapView: 
         get() = Position(marker.position.latitude, marker.position.longitude)
         set(value) {marker.position = value.toGeoPoint()}
 
+    override var title: String
+        get() = marker.title ?: ""
+        set(value) { marker.title = value }
+
+    override var snippet: String
+        get() = marker.snippet ?: ""
+        set(value) { marker.snippet = value }
+
     override fun setIcon(icon: Int, color: Int) {
         marker.icon = context.resources.getDrawable(icon).also {
             DrawableCompat.setTint(it, color)

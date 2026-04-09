@@ -198,6 +198,61 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="FlightRadar24 Nearby Aircraft">
+
+        <SwitchPreference
+                android:title="Show nearby aircraft"
+                android:summary="Display real aircraft positions from FlightRadar24 on the map"
+                android:defaultValue="false"
+                android:key="fr24_enabled"/>
+
+        <ListPreference
+                android:title="Search radius"
+                android:summary="Fetch aircraft within this radius\n%s"
+                android:entries="@array/Fr24RadiusEntries"
+                android:entryValues="@array/Fr24RadiusValues"
+                android:defaultValue="50"
+                android:key="fr24_radius_km"
+                android:dependency="fr24_enabled"/>
+
+        <ListPreference
+                android:title="Display altitude ceiling (meters)"
+                android:summary="Hide aircraft above this altitude\n%s"
+                android:entries="@array/Fr24AltEntries"
+                android:entryValues="@array/Fr24AltValues"
+                android:defaultValue="3000"
+                android:key="fr24_display_alt_ceiling"
+                android:dependency="fr24_enabled"/>
+
+        <ListPreference
+                android:title="Warning altitude ceiling (meters)"
+                android:summary="Only warn about aircraft below this altitude\n%s"
+                android:entries="@array/Fr24AltEntries"
+                android:entryValues="@array/Fr24AltValues"
+                android:defaultValue="1500"
+                android:key="fr24_warning_alt_ceiling"
+                android:dependency="fr24_enabled"/>
+
+        <ListPreference
+                android:title="Warning distance (meters)"
+                android:summary="Warn when aircraft is closer than this to drone\n%s"
+                android:entries="@array/Fr24WarningDistEntries"
+                android:entryValues="@array/Fr24WarningDistValues"
+                android:defaultValue="5000"
+                android:key="fr24_warning_distance"
+                android:dependency="fr24_enabled"/>
+
+        <ListPreference
+                android:title="Poll interval (seconds)"
+                android:summary="How often to refresh aircraft positions\n%s"
+                android:entries="@array/Fr24PollEntries"
+                android:entryValues="@array/Fr24PollValues"
+                android:defaultValue="10"
+                android:key="fr24_poll_interval"
+                android:dependency="fr24_enabled"/>
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="Diagnostics">
         <Preference android:title="Copy debug info"
                 android:key="copy_debug_info">

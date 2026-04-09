@@ -214,4 +214,28 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getInt("home_line_color", defaultHomeLineColor)
     }
 
+    fun isFr24Enabled(): Boolean {
+        return sharedPreferences.getBoolean("fr24_enabled", false)
+    }
+
+    fun getFr24RadiusKm(): Int {
+        return sharedPreferences.getString("fr24_radius_km", "50")?.toIntOrNull() ?: 50
+    }
+
+    fun getFr24DisplayAltCeilingM(): Int {
+        return sharedPreferences.getString("fr24_display_alt_ceiling", "3000")?.toIntOrNull() ?: 3000
+    }
+
+    fun getFr24WarningAltCeilingM(): Int {
+        return sharedPreferences.getString("fr24_warning_alt_ceiling", "1500")?.toIntOrNull() ?: 1500
+    }
+
+    fun getFr24WarningDistanceM(): Int {
+        return sharedPreferences.getString("fr24_warning_distance", "5000")?.toIntOrNull() ?: 5000
+    }
+
+    fun getFr24PollIntervalSec(): Int {
+        return sharedPreferences.getString("fr24_poll_interval", "10")?.toIntOrNull() ?: 10
+    }
+
 }

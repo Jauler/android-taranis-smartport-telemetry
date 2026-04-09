@@ -9,6 +9,7 @@ import androidx.preference.PreferenceFragmentCompat
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
+import androidx.preference.ListPreference
 import crazydude.com.telemetry.utils.FileLogger
 import java.io.IOException
 
@@ -64,6 +65,28 @@ class PrefsFragment : PreferenceFragmentCompat() {
             showManageFlightPlansDialog()
             return@setOnPreferenceClickListener true
         }
+        // Validate: display altitude ceiling must be >= warning altitude ceiling
+        findPreference("fr24_warning_alt_ceiling").setOnPreferenceChangeListener { _, newValue ->
+            val warningCeiling = (newValue as? String)?.toIntOrNull() ?: 1500
+            val displayCeiling = prefManager.getFr24DisplayAltCeilingM()
+            if (warningCeiling > displayCeiling) {
+                val displayPref = findPreference("fr24_display_alt_ceiling") as? ListPreference
+                displayPref?.value = newValue.toString()
+                Toast.makeText(context, "Display ceiling raised to match warning ceiling", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+        findPreference("fr24_display_alt_ceiling").setOnPreferenceChangeListener { _, newValue ->
+            val displayCeiling = (newValue as? String)?.toIntOrNull() ?: 3000
+            val warningCeiling = prefManager.getFr24WarningAltCeilingM()
+            if (displayCeiling < warningCeiling) {
+                Toast.makeText(context, "Display ceiling cannot be lower than warning ceiling ($warningCeiling m)", Toast.LENGTH_LONG).show()
+                false
+            } else {
+                true
+            }
+        }
+
         updateSummary()
     }
 

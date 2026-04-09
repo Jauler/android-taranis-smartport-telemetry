@@ -42,6 +42,7 @@ import com.nex3z.flowlayout.FlowLayout
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.converter.Converter
 import crazydude.com.telemetry.manager.FlightPlanManager
+import crazydude.com.telemetry.manager.Fr24Manager
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.manager.SensorTimeoutManager
 import crazydude.com.telemetry.maps.MapLine
@@ -68,7 +69,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 //class MapsActivity : AppCompatActivity(), DataDecoder.Listener {
-class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener {
+class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener, Fr24Manager.Listener {
 
     companion object {
         private const val REQUEST_ENABLE_BT: Int = 0
@@ -136,6 +137,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     private var marker: MapMarker? = null
     private var polyLine: MapLine? = null
+    private var fr24Manager: Fr24Manager? = null
+    private val airplaneMarkers = mutableMapOf<Int, MapMarker>()
     private var headingPolyline: MapLine? = null
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
     private var homeLine: MapLine? = null
@@ -505,6 +508,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         homeLine = null
         marker?.remove();
         marker = null;
+        airplaneMarkers.values.forEach { it.remove() }
+        airplaneMarkers.clear()
 
         if (mapType == OsmMapWrapper.MAP_TYPE_DEFAULT) {
             initOSMMap(TileSourceFactory.DEFAULT_TILE_SOURCE)
@@ -1140,6 +1145,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, phoneLocationListener)
         }
+        startFr24()
     }
 
     override fun onPause() {
@@ -1147,6 +1153,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         map?.onPause()
         this.sensorTimeoutManager.pause();
         this.logPlayer?.stop();
+        stopFr24()
         updateFullscreenState()//check if user has brought system ui with swipe
         val lm = getSystemService(LOCATION_SERVICE) as LocationManager
         lm.removeUpdates(phoneLocationListener)
@@ -2392,6 +2399,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                     this.map?.invalidate()
                 }
                 this.tryCreateMarker()
+                fr24Manager?.checkProximity(latitude, longitude)
             }
         }
     }
@@ -2793,6 +2801,85 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             return false;
         }
         return true;
+    }
+
+    // --- FlightRadar24 nearby aircraft ---
+
+    private fun startFr24() {
+        if (preferenceManager.isFr24Enabled()) {
+            fr24Manager = Fr24Manager(preferenceManager, this)
+            fr24Manager?.start { map?.getMyLocation() }
+        }
+    }
+
+    private fun stopFr24() {
+        fr24Manager?.stop()
+        fr24Manager = null
+        airplaneMarkers.values.forEach { it.remove() }
+        airplaneMarkers.clear()
+        map?.invalidate()
+    }
+
+    override fun onAirplanesUpdated(airplanes: List<Fr24Manager.AirplaneInfo>) {
+        val currentIds = airplanes.map { it.flightId }.toSet()
+
+        // Remove stale markers
+        val staleIds = airplaneMarkers.keys.filter { it !in currentIds }
+        staleIds.forEach { id ->
+            airplaneMarkers.remove(id)?.remove()
+        }
+
+        // Update or create markers
+        for (airplane in airplanes) {
+            val title = airplane.displayName
+            val snippet = buildString {
+                if (airplane.aircraftType.isNotEmpty()) append(airplane.aircraftType)
+                if (airplane.registration.isNotEmpty()) {
+                    if (isNotEmpty()) append(" | ")
+                    append(airplane.registration)
+                }
+                append("\nAlt: ${airplane.altMeters}m | Spd: ${airplane.speedKmh}km/h")
+                val route = airplane.route
+                if (route.isNotEmpty()) append("\n$route")
+            }
+
+            val existing = airplaneMarkers[airplane.flightId]
+            if (existing != null) {
+                existing.position = Position(airplane.lat.toDouble(), airplane.lon.toDouble())
+                existing.rotation = airplane.track.toFloat()
+                existing.title = title
+                existing.snippet = snippet
+            } else {
+                val m = map?.addMarker(
+                    R.drawable.ic_airplane_fr24,
+                    Color.argb(200, 255, 165, 0),
+                    Position(airplane.lat.toDouble(), airplane.lon.toDouble())
+                )
+                if (m != null) {
+                    m.rotation = airplane.track.toFloat()
+                    m.title = title
+                    m.snippet = snippet
+                    airplaneMarkers[airplane.flightId] = m
+                }
+            }
+        }
+        map?.invalidate()
+    }
+
+    override fun onProximityWarning(
+        airplane: Fr24Manager.AirplaneInfo,
+        distanceMeters: Double,
+        directionDeg: Double
+    ) {
+        val cardinal = bearingToCardinal(directionDeg)
+        val msg = "TRAFFIC: ${airplane.displayName} ${distanceMeters.roundToInt()}m $cardinal, alt ${airplane.altMeters}m"
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
+    private fun bearingToCardinal(deg: Double): String {
+        val dirs = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+        val index = ((deg + 22.5) / 45.0).toInt() % 8
+        return dirs[index]
     }
 
 }

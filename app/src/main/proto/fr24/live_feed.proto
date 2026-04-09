@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package fr24;
+
+import "fr24/common.proto";
+import "google/protobuf/field_mask.proto";
+
+option java_package = "crazydude.com.telemetry.proto.fr24";
+option java_multiple_files = true;
+
+message LocationBoundaries {
+    float north = 1;
+    float south = 2;
+    float west = 3;
+    float east = 4;
+}
+
+message VisibilitySettings {
+    repeated DataSource sources_list = 1;
+    repeated Service services_list = 2;
+    TrafficType traffic_type = 3;
+}
+
+message AirlineFilter {
+    string icao = 1;
+}
+
+message AirportFilter {
+    string iata = 1;
+}
+
+message Filter {
+    repeated Interval altitude_ranges_list = 1;
+    repeated Interval speed_ranges_list = 2;
+    repeated AirlineFilter airlines_list = 3;
+    repeated string callsigns_list = 4;
+    repeated string radars_list = 5;
+    repeated string regs_list = 6;
+    repeated AirportFilter airports_list = 7;
+    repeated string flights_list = 8;
+    repeated string types_list = 9;
+    repeated Interval birth_year_ranges_list = 10;
+    repeated uint32 squawks_list = 11;
+    repeated AirportFilter origins_list = 12;
+    repeated AirportFilter destinations_list = 13;
+    repeated Service categories_list = 14;
+    repeated string airspaces_list = 15;
+}
+
+message LiveFeedRequest {
+    LocationBoundaries bounds = 1;
+    VisibilitySettings settings = 2;
+    Filter filters_list = 3;
+    string fleets_list = 4;
+    bool highlight_mode = 5;
+    optional bool stats = 6;
+    optional int32 limit = 7;
+    optional int32 maxage = 8;
+    optional RestrictionVisibility restriction_mode = 9;
+    google.protobuf.FieldMask field_mask = 10;
+}
+
+message LiveFeedResponse {
+    repeated Flight flights_list = 1;
+}
