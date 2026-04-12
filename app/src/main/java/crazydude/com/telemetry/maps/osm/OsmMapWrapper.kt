@@ -49,7 +49,7 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
             tilesOverlay.loadingLineColor = android.graphics.Color.TRANSPARENT
             mapView.overlayManager.add(tilesOverlay)
         }
-        mapView.overlayManager.add(RotationGestureOverlay(mapView))
+        mapView.overlayManager.add(DeadbandRotationGestureOverlay(mapView))
         mapView.overlayManager.add(myLocationNewOverlay)
         val mapController: IMapController = mapView.controller
         mapController.setZoom(4.toDouble())
