@@ -84,6 +84,25 @@
                 android:layout_alignParentTop="true"
                 android:layout_margin="8dp" />
 
+        <crazydude.com.telemetry.ui.TextViewOutline
+                android:id="@+id/compass_heading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentEnd="true"
+                android:layout_alignParentRight="true"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginRight="8dp"
+                android:layout_toLeftOf="@+id/buttons_box"
+                android:layout_toStartOf="@+id/buttons_box"
+                android:text="↑ 000°"
+                android:textColor="@android:color/white"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                app:outlineColor="@android:color/black"
+                app:outlineSize="3dp" />
+
         <com.google.android.flexbox.FlexboxLayout xmlns:android="http://schemas.android.com/apk/res/android"
                 xmlns:app="http://schemas.android.com/apk/res-auto"
                 android:id="@+id/buttons_box"

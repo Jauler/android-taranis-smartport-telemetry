@@ -184,6 +184,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var topList: FlowLayout
     private lateinit var bottomList: FlowLayout
     private lateinit var rootLayout: CoordinatorLayout
+    private lateinit var compassHeading: TextViewOutline
     private lateinit var mapHolder: FrameLayout
     private lateinit var mapViewHolder: FrameLayout
     private lateinit var rc_widget: RCWidget
@@ -304,6 +305,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         followButton = findViewById(R.id.follow_button)
         mapTypeButton = findViewById(R.id.map_type_button)
         northUpButton = findViewById(R.id.north_up_button)
+        compassHeading = findViewById(R.id.compass_heading)
         myLocationButton = findViewById(R.id.my_location_button)
         settingsButton = findViewById(R.id.settings_button)
         replayButton = findViewById(R.id.replay_button)
@@ -532,9 +534,13 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private fun initOSMMap(tileSource: OnlineTileSourceBase, overlayTileSources: List<OnlineTileSourceBase> = emptyList()) {
         val mapView = org.osmdroid.views.MapView(this)
         mapHolder.addView(mapView)
-        map = OsmMapWrapper(applicationContext, mapView, tileSource, { initHeadingLine() }, overlayTileSources)
+        val osmMap = OsmMapWrapper(applicationContext, mapView, tileSource, { initHeadingLine() }, overlayTileSources)
+        map = osmMap
         map?.setOnCameraMoveStartedListener {
             setFollowMode(false);
+        }
+        osmMap.setOnOrientationChangedListener { orientation ->
+            updateCompassHeading(orientation)
         }
         polyLine = map?.addPolyline(preferenceManager.getRouteColor())
         val p = dataService?.points;
@@ -544,6 +550,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         homeLine = map?.addPolyline(2f, preferenceManager.getHomeLineColor())
         drawFlightPlans()
         showMyLocation()
+    }
+
+    private fun updateCompassHeading(orientation: Float) {
+        val heading = (((-orientation % 360f) + 360f) % 360f).roundToInt() % 360
+        compassHeading.text = "↑ %03d°".format(heading)
+        compassHeading.visibility = View.VISIBLE
     }
 
     private fun showMyLocation() {

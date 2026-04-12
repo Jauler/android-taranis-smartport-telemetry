@@ -106,12 +106,27 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         return osmLine
     }
 
+    private var onCameraMoveListener: (() -> Unit)? = null
+    private var onOrientationChangedListener: ((Float) -> Unit)? = null
+    private var lastReportedOrientation: Float = 0f
+
     override fun setOnCameraMoveStartedListener(function: () -> Unit) {
+        onCameraMoveListener = function
         mapView.setOnTouchListener { v, event ->
-            function()
+            onCameraMoveListener?.invoke()
             markers.forEach { it.updateForMapOrientation() }
+            val orientation = mapView.mapOrientation
+            if (orientation != lastReportedOrientation) {
+                lastReportedOrientation = orientation
+                onOrientationChangedListener?.invoke(orientation)
+            }
             return@setOnTouchListener false
         }
+    }
+
+    fun setOnOrientationChangedListener(listener: (Float) -> Unit) {
+        onOrientationChangedListener = listener
+        listener(mapView.mapOrientation)
     }
 
     override fun addPolyline(color: Int): MapLine {
@@ -149,6 +164,10 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
     override fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {
     }
 
+    override fun getMapOrientation(): Float {
+        return mapView.mapOrientation
+    }
+
     private var orientationAnimator: ValueAnimator? = null
 
     override fun resetMapOrientation() {
@@ -160,8 +179,10 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
             duration = 300
             interpolator = DecelerateInterpolator()
             addUpdateListener {
-                mapView.mapOrientation = it.animatedValue as Float
+                val angle = it.animatedValue as Float
+                mapView.mapOrientation = angle
                 markers.forEach { m -> m.updateForMapOrientation() }
+                onOrientationChangedListener?.invoke(angle)
             }
             start()
         }
