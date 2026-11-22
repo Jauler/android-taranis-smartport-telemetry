@@ -210,6 +210,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var mapType = OsmMapWrapper.MAP_TYPE_DEFAULT
 
     private var lastGPS = Position(0.0, 0.0)
+    // During replay the home line goes to where the flight started, not to the phone's current location.
+    private var replayHomeGPS: Position? = null
     private var lastHeading = 0f
     private var followMode = true
     private var hasGPSFix = false
@@ -599,13 +601,20 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             return
         }
         val drone = if (lastGPS.lat != 0.0 || lastGPS.lon != 0.0) lastGPS else return
-        val phone = map?.getMyLocation() ?: return
+        val home = if (isInReplayMode()) replayHomeGPS else map?.getMyLocation()
+        if (home == null) {
+            if (line.size > 0) {
+                line.clear()
+                map?.invalidate()
+            }
+            return
+        }
         if (line.size == 2) {
             line.setPoint(0, drone)
-            line.setPoint(1, phone)
+            line.setPoint(1, home)
         } else {
             line.clear()
-            line.addPoints(listOf(drone, phone))
+            line.addPoints(listOf(drone, home))
         }
         map?.invalidate()
     }
@@ -2198,6 +2207,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.sensorTimeoutManager.disableTimeouts()
         this.tlmRate.setAlpha(0.5f);
         lastGPS = Position(0.0, 0.0);
+        replayHomeGPS = null
         hasGPSFix = false;
         marker?.remove()
         marker = null
@@ -2231,6 +2241,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.sensorTimeoutManager.enableTimeouts()
         this.tlmRate.setAlpha(1.0f);
         lastGPS = Position(0.0, 0.0)
+        replayHomeGPS = null
+        homeLine?.clear()
+        map?.invalidate()
     }
 
     private fun switchToConnectedState() {
@@ -2371,6 +2384,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 lastGPS = Position(0.0,0.0)
             }
             if (hasGPSFix && list.isNotEmpty()) {
+                if (isInReplayMode() && replayHomeGPS == null) {
+                    // LogPlayer delivers replay positions only through this method, in recorded
+                    // order, and only with a GPS fix: the first one is where the flight started.
+                    replayHomeGPS = list[0]
+                }
                 //add all points except last one
                 //last one will be fired in onGPSData()
                 if ( list.size>=2) {
