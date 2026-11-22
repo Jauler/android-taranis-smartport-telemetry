@@ -14,6 +14,10 @@ class PreferenceManager(context: Context) {
     private val defaultHomeLineColor = context.resources.getColor(R.color.colorHomeLine)
 
     companion object {
+        const val SENSOR_HEIGHT_ABOVE_GROUND = "Height above ground"
+        const val SENSOR_ALTITUDE_LIMIT = "Altitude limit"
+        const val SENSOR_GROUND_ELEVATION = "Ground elevation"
+
         val sensors = setOf(
             SensorSetting("Satellites", 1),
             SensorSetting("Battery", 2),
@@ -41,8 +45,14 @@ class PreferenceManager(context: Context) {
             SensorSetting("Cell Voltage", 16, "top", false ),
             SensorSetting("Altitude above MSL", 7, "bottom", false),
             SensorSetting("Throttle", 8, "bottom", false),
-            SensorSetting("Telemetry rate", 17, "top", false )
+            SensorSetting("Telemetry rate", 17, "top", false ),
+            SensorSetting(SENSOR_HEIGHT_ABOVE_GROUND, 9, "bottom"),
+            SensorSetting(SENSOR_ALTITUDE_LIMIT, 10, "bottom"),
+            SensorSetting(SENSOR_GROUND_ELEVATION, 11, "bottom")
         )
+
+        /** Sensors which only work with terrain data; hidden when there is none. */
+        val terrainSensors = setOf(SENSOR_HEIGHT_ABOVE_GROUND, SENSOR_ALTITUDE_LIMIT, SENSOR_GROUND_ELEVATION)
     }
 
     fun isLoggingEnabled(): Boolean {
@@ -240,6 +250,29 @@ class PreferenceManager(context: Context) {
 
     fun isFlightPlanNamesEnabled(): Boolean {
         return sharedPreferences.getBoolean("show_flight_plan_names", true)
+    }
+
+    // --- Terrain ---
+
+    private fun getFloat(key: String, default: Float): Float {
+        return sharedPreferences.getString(key, null)?.replace(',', '.')?.toFloatOrNull() ?: default
+    }
+
+    /**
+     * "takeoff": the altitude sensor is relative to the takeoff point; "msl": above sea level;
+     * "auto": detect which of the two it is.
+     */
+    fun getTerrainAltitudeReference(): String {
+        return sharedPreferences.getString("terrain_alt_reference", "auto") ?: "auto"
+    }
+
+    /** Maximum allowed height above ground, meters. */
+    fun getTerrainHeightLimit(): Float {
+        return getFloat("terrain_height_limit", 120f)
+    }
+
+    fun isTerrainVoiceWarningsEnabled(): Boolean {
+        return sharedPreferences.getBoolean("terrain_voice_warnings", true)
     }
 
 }

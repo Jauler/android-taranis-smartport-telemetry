@@ -153,6 +153,56 @@
                     app:minText="100"
                     app:iconWidthDp="24"/>
 
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/height_above_ground"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="6dp"
+                    android:drawableStart="@drawable/ic_height_above_ground"
+                    android:drawableLeft="@drawable/ic_height_above_ground"
+                    android:drawablePadding="4dp"
+                    android:layout_centerVertical="true"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="000 m"
+                    app:iconWidthDp="20"/>
+
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/altitude_limit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="6dp"
+                    android:drawableStart="@drawable/ic_altitude_limit"
+                    android:drawableLeft="@drawable/ic_altitude_limit"
+                    android:drawablePadding="4dp"
+                    android:layout_centerVertical="true"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="000 m"
+                    app:iconWidthDp="20"/>
+
+
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/ground_elevation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="6dp"
+                    android:drawableStart="@drawable/ic_ground_elevation"
+                    android:drawableLeft="@drawable/ic_ground_elevation"
+                    android:drawablePadding="4dp"
+                    android:layout_centerVertical="true"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="000 m"
+                    app:iconWidthDp="20"/>
+
+
         </com.nex3z.flowlayout.FlowLayout>
 
     </RelativeLayout>

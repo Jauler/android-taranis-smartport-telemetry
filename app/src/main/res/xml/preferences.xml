@@ -140,6 +140,33 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="Terrain">
+
+        <Preference
+                android:title="Terrain data"
+                android:summary="Not installed"
+                android:key="terrain_info"/>
+
+        <ListPreference
+                android:title="Altitude sensor shows"
+                android:summary="%s"
+                android:entries="@array/TerrainAltReferenceEntries"
+                android:entryValues="@array/TerrainAltReferenceValues"
+                android:defaultValue="auto"
+                android:key="terrain_alt_reference"/>
+
+        <Preference
+                android:title="Maximum height above ground"
+                android:key="terrain_height_limit"/>
+
+        <SwitchPreference
+                android:title="Voice warnings"
+                android:summary="Announce an exceeded height limit"
+                android:defaultValue="true"
+                android:key="terrain_voice_warnings"/>
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="USB Serial">
         <ListPreference
             android:title="Baudrate"

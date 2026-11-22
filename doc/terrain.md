@@ -4,6 +4,29 @@ The application can work with an offline terrain model. Nothing is downloaded wh
 the data is one file, the *terrain pack* (`*.tpk`), which is either bundled into the APK or
 copied to the phone by hand.
 
+With a terrain pack present the application shows:
+
+| Readout | Meaning |
+|---|---|
+| Height above ground | Altitude of the aircraft above the ground right below it (AGL). |
+| Ground elevation | Elevation above sea level of the ground right below the aircraft. |
+| Altitude limit | The altitude, as shown by the altitude sensor, at which the aircraft reaches the height above ground limit (120 m by default). If the ground below the aircraft is 30 m higher than the takeoff point, the limit reads 150 m. |
+
+Above the height limit the two height readouts turn red and there is a voice warning. The
+readouts are ordinary sensors and can be moved or hidden in *Settings > Sensor display
+settings*. Without a terrain pack they are hidden.
+
+## How the values are calculated
+
+* The altitude sensor normally reports the height above the takeoff point. The application
+  takes the position of the aircraft at the moment of arming as the takeoff point (the first
+  received position if the armed state is unknown) and looks up the ground elevation there.
+  *Set takeoff point at UAV location* in the map menu overrides it. Some flight controllers
+  report altitude above sea level instead (e.g. Betaflight over CRSF). This is detected from
+  the first altitude of the flight (about zero or about the terrain elevation); if the guess
+  is wrong, e.g. after connecting in mid-flight, pick the right one in
+  *Settings > Terrain > Altitude sensor shows*.
+
 ## Installing a pack
 
 * **Bundled:** put the file to `app/src/main/assets/terrain/terrain.tpk` before building. It is
@@ -46,6 +69,9 @@ All in `tools/terrain`:
 
 * `inspect_pack.py PACK [LAT LON [LAT2 LON2 [ANTENNA_HEIGHT]]]` - what the pack contains, the
   terrain at a point, or the line of sight between two points.
+* `make_demo_log.py OUT.log [--csv FLIGHT.csv]` - writes a telemetry log (a synthetic flight, or
+  the track of a recorded CSV) which can be replayed in the application to see the terrain
+  readouts without flying.
 * `make_test_pack.py` - generates the small pack and the expected values used by the unit test
   `TerrainModelTest`.
 

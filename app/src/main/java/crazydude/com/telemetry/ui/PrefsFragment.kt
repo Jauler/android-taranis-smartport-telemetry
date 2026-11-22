@@ -5,6 +5,7 @@ import android.content.*
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -13,6 +14,7 @@ import crazydude.com.telemetry.R
 import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
 import androidx.preference.ListPreference
+import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.utils.FileLogger
 import java.io.IOException
 
@@ -90,7 +92,79 @@ class PrefsFragment : PreferenceFragmentCompat() {
             }
         }
 
+        bindNumberPreference(
+            "terrain_height_limit", 120f, 1f, 10000f,
+            "Height above the ground the aircraft is allowed to reach (120 m in the EU open category)"
+        )
+        updateTerrainInfo()
+
         updateSummary()
+    }
+
+    private fun formatNumber(value: Float): String {
+        return if (value == Math.rint(value.toDouble()).toFloat()) value.toInt().toString() else value.toString()
+    }
+
+    /**
+     * Turns a plain preference into a "type a number of meters" one. The value is stored as a
+     * string, like the values of the list preferences.
+     */
+    private fun bindNumberPreference(key: String, default: Float, min: Float, max: Float, description: String) {
+        val preference = findPreference(key)
+        val prefs = preferenceManager.sharedPreferences
+
+        fun current(): Float {
+            return prefs.getString(key, null)?.replace(',', '.')?.toFloatOrNull() ?: default
+        }
+
+        fun refresh() {
+            preference.summary = "$description\n${formatNumber(current())} m"
+        }
+
+        refresh()
+        preference.setOnPreferenceClickListener {
+            val editText = EditText(context)
+            editText.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            editText.setText(formatNumber(current()))
+            editText.setSelection(editText.text.length)
+            AlertDialog.Builder(context!!)
+                .setTitle("${preference.title}, m")
+                .setView(editText)
+                .setPositiveButton("OK") { _, _ ->
+                    val value = editText.text.toString().replace(',', '.').toFloatOrNull()
+                    if (value == null || value < min || value > max) {
+                        Toast.makeText(
+                            context,
+                            "Enter a value between ${formatNumber(min)} and ${formatNumber(max)}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        prefs.edit().putString(key, formatNumber(value)).apply()
+                        refresh()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return@setOnPreferenceClickListener true
+        }
+    }
+
+    private fun updateTerrainInfo() {
+        val ctx = context ?: return
+        val preference = findPreference("terrain_info")
+        val model = try {
+            TerrainLoader.open(ctx)
+        } catch (e: Exception) {
+            null
+        }
+        if (model != null) {
+            preference.summary = model.description
+            model.close()
+        } else {
+            val dir = TerrainLoader.userDirectory(ctx)
+            preference.summary = "Not installed. Height above ground and the altitude limit need a " +
+                    "terrain pack (*.tpk)" + (if (dir != null) " in\n${dir.absolutePath}" else "")
+        }
     }
 
     private fun displayName(uri: Uri): String {
