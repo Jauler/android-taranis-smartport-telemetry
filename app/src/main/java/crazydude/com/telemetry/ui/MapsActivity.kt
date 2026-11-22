@@ -13,6 +13,7 @@ import android.location.LocationManager
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
@@ -29,6 +30,7 @@ import android.text.SpannableString
 import android.text.method.LinkMovementMethod
 import android.text.style.StyleSpan
 import android.util.TypedValue
+import android.view.TouchDelegate
 import android.view.View
 import android.view.WindowManager
 import android.widget.*
@@ -330,6 +332,15 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         replayButton = findViewById(R.id.replay_button)
         seekBar = findViewById(R.id.seekbar)
         playButton = findViewById(R.id.play_button)
+        // The mini button is only 40 dp: let touches a bit around it count too, so it is not
+        // missed and the map panned instead. Rebuilt on every layout, as the button starts hidden.
+        playButton.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            val extra = (16 * resources.displayMetrics.density).toInt()
+            val area = Rect()
+            v.getHitRect(area)
+            area.inset(-extra, -extra)
+            (v.parent as View).touchDelegate = TouchDelegate(area, v)
+        }
         horizonView = findViewById(R.id.horizon_view)
         fullscreenButton = findViewById(R.id.fullscreen_button)
         menuButton = findViewById(R.id.replay_menu_button)
