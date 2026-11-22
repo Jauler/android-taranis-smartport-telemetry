@@ -22,10 +22,8 @@ settings*. Without a terrain pack they are hidden.
   takes the position of the aircraft at the moment of arming as the takeoff point (the first
   received position if the armed state is unknown) and looks up the ground elevation there.
   *Set takeoff point at UAV location* in the map menu overrides it. Some flight controllers
-  report altitude above sea level instead (e.g. Betaflight over CRSF). This is detected from
-  the first altitude of the flight (about zero or about the terrain elevation); if the guess
-  is wrong, e.g. after connecting in mid-flight, pick the right one in
-  *Settings > Terrain > Altitude sensor shows*.
+  report altitude above sea level instead (e.g. Betaflight over CRSF); switch
+  *Settings > Terrain > Altitude sensor shows* to *Altitude above sea level* for those.
 
 ## Installing a pack
 

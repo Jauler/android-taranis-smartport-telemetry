@@ -145,13 +145,11 @@
     </string-array>
 
     <string-array name="TerrainAltReferenceEntries">
-        <item>Detect automatically</item>
         <item>Height above the takeoff point</item>
         <item>Altitude above sea level</item>
     </string-array>
 
     <string-array name="TerrainAltReferenceValues">
-        <item>auto</item>
         <item>takeoff</item>
         <item>msl</item>
     </string-array>

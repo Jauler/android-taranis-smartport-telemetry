@@ -259,11 +259,11 @@ class PreferenceManager(context: Context) {
     }
 
     /**
-     * "takeoff": the altitude sensor is relative to the takeoff point; "msl": above sea level;
-     * "auto": detect which of the two it is.
+     * "takeoff": the altitude sensor is relative to the takeoff point; "msl": above sea level.
+     * Anything else (e.g. the former "auto") counts as "takeoff".
      */
     fun getTerrainAltitudeReference(): String {
-        return sharedPreferences.getString("terrain_alt_reference", "auto") ?: "auto"
+        return sharedPreferences.getString("terrain_alt_reference", "takeoff") ?: "takeoff"
     }
 
     /** Maximum allowed height above ground, meters. */

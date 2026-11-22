@@ -152,7 +152,7 @@
                 android:summary="%s"
                 android:entries="@array/TerrainAltReferenceEntries"
                 android:entryValues="@array/TerrainAltReferenceValues"
-                android:defaultValue="auto"
+                android:defaultValue="takeoff"
                 android:key="terrain_alt_reference"/>
 
         <Preference

@@ -23,10 +23,8 @@ import crazydude.com.telemetry.terrain.TerrainModel
  * frozen once it is armed. If the armed state is not known, the first position received is
  * used.
  *
- * Some setups (e.g. Betaflight over CRSF) report the altitude above sea level instead. Unless
- * the user has picked one of the two, this is detected from the first altitude of the flight:
- * an aircraft sitting at the takeoff point reads about zero in the first case and about the
- * elevation of the terrain in the second.
+ * Some setups (e.g. Betaflight over CRSF) report the altitude above sea level instead; the user
+ * picks which one in the settings (height above the takeoff point by default).
  */
 class TerrainMonitor(
     context: Context,
@@ -51,13 +49,8 @@ class TerrainMonitor(
     companion object {
         private const val TAG = "Terrain"
         private const val MIN_UPDATE_INTERVAL_MS = 400L
-        const val REFERENCE_AUTO = "auto"
         const val REFERENCE_TAKEOFF = "takeoff"
         const val REFERENCE_MSL = "msl"
-
-        private const val AUTO_UNDECIDED = 0
-        private const val AUTO_TAKEOFF = 1
-        private const val AUTO_MSL = 2
     }
 
     private val model: TerrainModel? = try {
@@ -79,10 +72,6 @@ class TerrainMonitor(
     private var takeoff: Position? = null
     private var takeoffLocked = false
     private var disarmed = false
-
-    // Automatic altitude reference detection; only touched by the worker thread
-    private var autoReference = AUTO_UNDECIDED
-    private var autoReferenceGeneration = -1
 
     val isAvailable: Boolean
         get() = model != null
@@ -207,36 +196,15 @@ class TerrainMonitor(
         }
     }
 
-    /**
-     * Guesses whether the altitude sensor reports altitude above sea level. The first altitude
-     * of a flight decides; the guess is dropped if it later puts the aircraft deep underground.
-     */
-    private fun isAltitudeAboveSeaLevel(input: Input, takeoffGround: Float, ground: Float): Boolean {
-        if (autoReferenceGeneration != input.generation) {
-            autoReferenceGeneration = input.generation
-            autoReference = AUTO_UNDECIDED
-        }
-        if (autoReference == AUTO_UNDECIDED) {
-            if (input.altitude.isNaN() || takeoffGround.isNaN()) return false
-            autoReference = if (input.altitude > Math.max(30f, takeoffGround / 2)) AUTO_MSL else AUTO_TAKEOFF
-        }
-        if (autoReference == AUTO_MSL && !ground.isNaN() && input.altitude - ground < -20f) {
-            autoReference = AUTO_TAKEOFF
-        }
-        return autoReference == AUTO_MSL
-    }
-
     private fun evaluate(terrain: TerrainModel, input: Input): State {
         val ground = terrain.groundAt(input.aircraft.lat, input.aircraft.lon)
 
-        val takeoffGround = input.takeoff?.let { terrain.groundAt(it.lat, it.lon) } ?: Float.NaN
-        val relativeToTakeoff = when (input.altitudeReference) {
-            REFERENCE_TAKEOFF -> true
-            REFERENCE_MSL -> false
-            else -> !isAltitudeAboveSeaLevel(input, takeoffGround, ground)
-        }
         // Elevation which the altitude sensor reads as zero
-        val reference = if (relativeToTakeoff) takeoffGround else 0f
+        val reference = if (input.altitudeReference == REFERENCE_MSL) {
+            0f
+        } else {
+            input.takeoff?.let { terrain.groundAt(it.lat, it.lon) } ?: Float.NaN
+        }
 
         val heightAboveGround = input.altitude + reference - ground
         val altitudeLimit = input.heightLimit + ground - reference
