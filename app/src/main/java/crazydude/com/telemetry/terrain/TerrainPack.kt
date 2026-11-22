@@ -100,6 +100,11 @@ class RasterLayer internal constructor(
     private var lastTile: Tile? = null
     private val inflater = Inflater()
 
+    /** Frees the native memory of the decompressor; the layer must not be used afterwards. */
+    internal fun close() {
+        inflater.end()
+    }
+
     /** Raw stored value of a cell, or [nodata] when the cell is outside of the covered area. */
     @Synchronized
     fun rawAt(col: Int, row: Int): Int {
@@ -335,6 +340,7 @@ class TerrainPack(private val source: TerrainSource, cacheTilesPerLayer: Int = 4
         get() = layers.keys
 
     override fun close() {
+        layers.values.forEach { it.close() }
         source.close()
     }
 

@@ -40,29 +40,3 @@ Suggested fix:
   DataService or seed a new monitor from dataService.points.first() and the
   armed state in onServiceConnected(). Clear it only when a new session starts
   (idle state, new replay).
-
-
-2. Every screen rotation leaks the open terrain pack
-----------------------------------------------------
-
-Area: terrain pack loading
-Files: manager/TerrainMonitor.kt, terrain/TerrainPack.kt
-
-What happens:
-  Each MapsActivity creates a TerrainMonitor, which opens the terrain pack
-  (a RandomAccessFile/FileChannel, or an AssetFileDescriptor for the bundled
-  pack) and one java.util.zip.Inflater per layer. TerrainMonitor.destroy()
-  stops the worker thread but never closes the model, and the inflaters are
-  never end()-ed. Every rotation, and every other recreation of the activity,
-  leaves one more open file descriptor and its native zlib memory behind
-  until the garbage collector or the process death frees them.
-
-Effect:
-  Over a long session with many rotations, file descriptors and native memory
-  pile up; with a large pack this can end in fd exhaustion or a native
-  out-of-memory error.
-
-Suggested fix:
-  In destroy(), post model?.close() to the worker thread before quitSafely()
-  (so it cannot race with a running compute), and give RasterLayer a close()
-  that calls inflater.end(), called from TerrainPack.close().
