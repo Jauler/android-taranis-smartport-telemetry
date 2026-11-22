@@ -89,18 +89,19 @@ class LTMProtocol : Protocol {
                 }
                 if (bufferIndex == packetSize) {
                     if (checksum.toInt() == 0) {
+                        // every packet gets its own copy: the log player keeps the packets
                         when (packetType) {
                             Companion.PacketType.GPS -> {
-                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( GPS, 0, buffer ))
+                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( GPS, 0, buffer.copyOf() ))
                             }
                             Companion.PacketType.ATTITUDE -> {
-                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( ATTITUDE, 0, buffer ))
+                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( ATTITUDE, 0, buffer.copyOf() ))
                             }
                             Companion.PacketType.STATUS -> {
-                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( FLYMODE, 0, buffer ) )
+                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( FLYMODE, 0, buffer.copyOf() ) )
                             }
                             Companion.PacketType.ORIGIN -> {
-                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( ORIGIN, 0, buffer ) )
+                                dataDecoder.decodeData( Protocol.Companion.TelemetryData( ORIGIN, 0, buffer.copyOf() ) )
                             }
                             Companion.PacketType.NAVIGATION -> {
                             }
