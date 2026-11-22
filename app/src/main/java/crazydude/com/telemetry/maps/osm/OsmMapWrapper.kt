@@ -42,18 +42,33 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         mapView.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         mapView.setMultiTouchControls(true)
         mapView.setTileSource(tileSource)
+        val tileProviders = mutableListOf<org.osmdroid.tileprovider.MapTileProviderBase>(mapView.tileProvider)
         for (overlayTileSource in overlayTileSources) {
             val overlayProvider = MapTileProviderBasic(context, overlayTileSource)
+            tileProviders.add(overlayProvider)
             val tilesOverlay = TilesOverlay(overlayProvider, context)
             tilesOverlay.loadingBackgroundColor = android.graphics.Color.TRANSPARENT
             tilesOverlay.loadingLineColor = android.graphics.Color.TRANSPARENT
             mapView.overlayManager.add(tilesOverlay)
         }
+        tileProviders.forEach { disableTilePreCache(it) }
         mapView.overlayManager.add(DeadbandRotationGestureOverlay(mapView))
         mapView.overlayManager.add(myLocationNewOverlay)
         val mapController: IMapController = mapView.controller
         mapController.setZoom(4.toDouble())
         callback()
+    }
+
+    /**
+     * Works around an osmdroid 6.1.20 bug (still present upstream): MapTileArea.set(MapTileArea)
+     * copies areas one tile too wide and tall, so MapTilePreCache pre-loads an extra column/row
+     * that MapTileCache.garbageCollection() evicts on every draw, and the pre-cache then decodes
+     * them again - an endless loop costing most of a CPU core per tile layer.
+     * Dropping the extra "protected" areas (border ring and parent zoom) leaves the pre-cache
+     * with nothing to do; visible tiles are still loaded and cached normally.
+     */
+    private fun disableTilePreCache(provider: org.osmdroid.tileprovider.MapTileProviderBase) {
+        provider.tileCache.protectedTileComputers.clear()
     }
 
     override fun initialized() : Boolean {
