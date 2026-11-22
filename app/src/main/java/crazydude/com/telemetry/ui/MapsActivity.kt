@@ -153,7 +153,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var homeLine: MapLine? = null
     private lateinit var terrainMonitor: TerrainMonitor
     private val phoneLocationListener = object : LocationListener {
-        override fun onLocationChanged(location: Location) { runOnUiThread { updateHomeLine() } }
+        override fun onLocationChanged(location: Location) {
+            runOnUiThread {
+                updateHomeLine()
+                updateTerrainAntenna()
+            }
+        }
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         override fun onProviderEnabled(provider: String) {}
         override fun onProviderDisabled(provider: String) {}
@@ -211,6 +216,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var heightAboveGround: TextView
     private lateinit var altitudeLimit: TextView
     private lateinit var groundElevation: TextView
+    private lateinit var minLosAltitude: TextView
+    private lateinit var terrainWarning: TextView
 
     private lateinit var sensorViewMap: HashMap<String, View>
     private lateinit var sensorsConverters: HashMap<String, Converter>
@@ -348,6 +355,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         heightAboveGround = findViewById(R.id.height_above_ground)
         altitudeLimit = findViewById(R.id.altitude_limit)
         groundElevation = findViewById(R.id.ground_elevation)
+        minLosAltitude = findViewById(R.id.min_los_altitude)
+        terrainWarning = findViewById(R.id.terrain_warning)
 
         sensorViewMap = hashMapOf(
             Pair(PreferenceManager.sensors.elementAt(0).name, satellites),
@@ -379,7 +388,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             Pair(PreferenceManager.sensors.elementAt(26).name, tlmRate),
             Pair(PreferenceManager.SENSOR_HEIGHT_ABOVE_GROUND, heightAboveGround),
             Pair(PreferenceManager.SENSOR_ALTITUDE_LIMIT, altitudeLimit),
-            Pair(PreferenceManager.SENSOR_GROUND_ELEVATION, groundElevation)
+            Pair(PreferenceManager.SENSOR_GROUND_ELEVATION, groundElevation),
+            Pair(PreferenceManager.SENSOR_MIN_LOS_ALTITUDE, minLosAltitude)
         )
 
         settingsButton.setOnClickListener {
@@ -1207,8 +1217,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         updateScreenOrientation()
         drawFlightPlans()
         updateHomeLine()
-        // Settings (height limit, altitude reference) may have changed while away
-        terrainMonitor.requestUpdate()
+        // Settings (height limit, altitude reference, antenna) may have changed while away
+        updateTerrainAntenna()
         if (checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, phoneLocationListener)
@@ -2488,6 +2498,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 }
                 this.tryCreateMarker()
                 fr24Manager?.updateDronePosition(latitude, longitude)
+                terrainMonitor.onAntennaPosition(antennaPosition())
                 terrainMonitor.onAircraftPosition(latitude, longitude)
             }
         }
@@ -2984,7 +2995,21 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         return dirs[index]
     }
 
-    // --- Terrain: height above ground and altitude limit ---
+    // --- Terrain: height above ground, altitude limit, line of sight ---
+
+    /**
+     * Where the receiving antenna is: at the phone. A replayed log does not tell where the phone
+     * was during the flight and the phone may be anywhere now, so the takeoff point is used then
+     * (the terrain monitor falls back to it when there is no antenna position).
+     */
+    private fun antennaPosition(): Position? {
+        return if (isInReplayMode()) null else map?.getMyLocation()
+    }
+
+    private fun updateTerrainAntenna() {
+        terrainMonitor.onAntennaPosition(antennaPosition())
+        terrainMonitor.requestUpdate()
+    }
 
     private fun formatTerrainHeight(v: Float): String {
         return when {
@@ -3000,6 +3025,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)
         altitudeLimit.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         groundElevation.text = formatTerrainHeight(state.groundElevation)
+        minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
+        minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
+
+        // Exceeding the height limit is not put on the map: the red readouts tell it already
+        terrainWarning.visibility = if (state.belowLos) View.VISIBLE else View.GONE
     }
 
 }

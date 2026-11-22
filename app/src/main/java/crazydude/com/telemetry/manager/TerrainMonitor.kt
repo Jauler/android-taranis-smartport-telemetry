@@ -13,7 +13,8 @@ import crazydude.com.telemetry.terrain.TerrainModel
  * Keeps the terrain related readouts up to date while the aircraft moves:
  *  - elevation above sea level of the ground right below the aircraft,
  *  - height above the ground right below the aircraft,
- *  - the altitude at which the aircraft reaches the legal height above ground limit.
+ *  - the altitude at which the aircraft reaches the legal height above ground limit,
+ *  - the lowest altitude with a free line of sight to the receiving antenna.
  *
  * Inputs are fed from the UI thread, the terrain lookups run on a worker thread and the
  * resulting [State] is delivered back on the UI thread.
@@ -41,7 +42,12 @@ class TerrainMonitor(
         val heightAboveGround: Float,
         /** Altitude (as shown by the altitude sensor) of the height above ground limit, NaN if unknown. */
         val altitudeLimit: Float,
+        /** Lowest altitude (as shown by the altitude sensor) with a free line to the antenna, NaN if unknown. */
+        val minLosAltitude: Float,
         val aboveLimit: Boolean,
+        val belowLos: Boolean,
+        /** Where the obstacle defining [minLosAltitude] is, null if unknown. */
+        val losObstacle: Position?,
         /** Elevation above sea level of the ground below the aircraft, NaN if unknown. */
         val groundElevation: Float
     )
@@ -72,6 +78,7 @@ class TerrainMonitor(
     private var takeoff: Position? = null
     private var takeoffLocked = false
     private var disarmed = false
+    private var antenna: Position? = null
 
     val isAvailable: Boolean
         get() = model != null
@@ -114,6 +121,11 @@ class TerrainMonitor(
         }
     }
 
+    /** Position of the receiving antenna (the phone); null if not known. */
+    fun onAntennaPosition(position: Position?) {
+        antenna = position
+    }
+
     /** Declares the current aircraft position to be the takeoff point until the next [reset]. */
     fun setTakeoffHere(): Boolean {
         val position = aircraft ?: return false
@@ -132,7 +144,7 @@ class TerrainMonitor(
         disarmed = false
         generation++
         if (model != null) {
-            listener.onTerrainState(State(Float.NaN, Float.NaN, false, Float.NaN))
+            listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, Float.NaN))
         }
     }
 
@@ -165,8 +177,12 @@ class TerrainMonitor(
         val aircraft: Position,
         val altitude: Float,
         val takeoff: Position?,
+        val antenna: Position?,
         val altitudeReference: String,
-        val heightLimit: Float
+        val heightLimit: Float,
+        val antennaHeight: Double,
+        val ignoreNear: Double,
+        val margin: Double
     )
 
     private fun snapshot(): Input? {
@@ -176,8 +192,12 @@ class TerrainMonitor(
             position,
             altitude,
             takeoff,
+            antenna,
             preferenceManager.getTerrainAltitudeReference(),
-            preferenceManager.getTerrainHeightLimit()
+            preferenceManager.getTerrainHeightLimit(),
+            preferenceManager.getTerrainAntennaHeight().toDouble(),
+            preferenceManager.getTerrainLosIgnoreNear().toDouble(),
+            preferenceManager.getTerrainLosMargin().toDouble()
         )
     }
 
@@ -197,7 +217,9 @@ class TerrainMonitor(
     }
 
     private fun evaluate(terrain: TerrainModel, input: Input): State {
-        val ground = terrain.groundAt(input.aircraft.lat, input.aircraft.lon)
+        val lat = input.aircraft.lat
+        val lon = input.aircraft.lon
+        val ground = terrain.groundAt(lat, lon)
 
         // Elevation which the altitude sensor reads as zero
         val reference = if (input.altitudeReference == REFERENCE_MSL) {
@@ -209,10 +231,34 @@ class TerrainMonitor(
         val heightAboveGround = input.altitude + reference - ground
         val altitudeLimit = input.heightLimit + ground - reference
 
+        var minLosAltitude = Float.NaN
+        var obstacle: Position? = null
+        if (terrain.hasObjects) {
+            // The antenna is where the phone is. Without a usable phone position (no fix, or a
+            // position outside of the terrain data) it is assumed to be at the takeoff point.
+            var los: TerrainModel.LineOfSight? = null
+            for (antenna in listOf(input.antenna, input.takeoff)) {
+                if (antenna == null || los != null) continue
+                los = terrain.minLineOfSightAltitude(
+                    antenna.lat, antenna.lon, input.antennaHeight,
+                    lat, lon, input.ignoreNear, input.margin
+                )
+            }
+            if (los != null) {
+                minLosAltitude = (los.minAltitude - reference).toFloat()
+                if (los.obstacleDistance < los.distance - 1.0) {
+                    obstacle = Position(los.obstacleLat, los.obstacleLon)
+                }
+            }
+        }
+
         return State(
             heightAboveGround,
             altitudeLimit,
+            minLosAltitude,
             !heightAboveGround.isNaN() && heightAboveGround > input.heightLimit,
+            !minLosAltitude.isNaN() && !input.altitude.isNaN() && input.altitude < minLosAltitude,
+            obstacle,
             ground
         )
     }

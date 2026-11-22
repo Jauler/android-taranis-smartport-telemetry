@@ -154,4 +154,38 @@
         <item>msl</item>
     </string-array>
 
+    <string-array name="TerrainIgnoreNearEntries">
+        <item>Count everything</item>
+        <item>25 m</item>
+        <item>50 m</item>
+        <item>100 m</item>
+        <item>200 m</item>
+        <item>500 m</item>
+    </string-array>
+
+    <string-array name="TerrainIgnoreNearValues">
+        <item>0</item>
+        <item>25</item>
+        <item>50</item>
+        <item>100</item>
+        <item>200</item>
+        <item>500</item>
+    </string-array>
+
+    <string-array name="TerrainMarginEntries">
+        <item>None</item>
+        <item>5 m</item>
+        <item>10 m</item>
+        <item>20 m</item>
+        <item>30 m</item>
+    </string-array>
+
+    <string-array name="TerrainMarginValues">
+        <item>0</item>
+        <item>5</item>
+        <item>10</item>
+        <item>20</item>
+        <item>30</item>
+    </string-array>
+
 </resources>

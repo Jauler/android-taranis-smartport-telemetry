@@ -17,6 +17,7 @@ class PreferenceManager(context: Context) {
         const val SENSOR_HEIGHT_ABOVE_GROUND = "Height above ground"
         const val SENSOR_ALTITUDE_LIMIT = "Altitude limit"
         const val SENSOR_GROUND_ELEVATION = "Ground elevation"
+        const val SENSOR_MIN_LOS_ALTITUDE = "Min line of sight altitude"
 
         val sensors = setOf(
             SensorSetting("Satellites", 1),
@@ -48,11 +49,14 @@ class PreferenceManager(context: Context) {
             SensorSetting("Telemetry rate", 17, "top", false ),
             SensorSetting(SENSOR_HEIGHT_ABOVE_GROUND, 9, "bottom"),
             SensorSetting(SENSOR_ALTITUDE_LIMIT, 10, "bottom"),
-            SensorSetting(SENSOR_GROUND_ELEVATION, 11, "bottom")
+            SensorSetting(SENSOR_GROUND_ELEVATION, 11, "bottom"),
+            SensorSetting(SENSOR_MIN_LOS_ALTITUDE, 12, "bottom")
         )
 
         /** Sensors which only work with terrain data; hidden when there is none. */
-        val terrainSensors = setOf(SENSOR_HEIGHT_ABOVE_GROUND, SENSOR_ALTITUDE_LIMIT, SENSOR_GROUND_ELEVATION)
+        val terrainSensors = setOf(
+            SENSOR_HEIGHT_ABOVE_GROUND, SENSOR_ALTITUDE_LIMIT, SENSOR_GROUND_ELEVATION, SENSOR_MIN_LOS_ALTITUDE
+        )
     }
 
     fun isLoggingEnabled(): Boolean {
@@ -269,6 +273,27 @@ class PreferenceManager(context: Context) {
     /** Maximum allowed height above ground, meters. */
     fun getTerrainHeightLimit(): Float {
         return getFloat("terrain_height_limit", 120f)
+    }
+
+    fun isTerrainRepeaterEnabled(): Boolean {
+        return sharedPreferences.getBoolean("terrain_repeater_enabled", false)
+    }
+
+    /** Height above ground of the antenna the aircraft talks to: the repeater when enabled. */
+    fun getTerrainAntennaHeight(): Float {
+        return if (isTerrainRepeaterEnabled()) {
+            getFloat("terrain_repeater_height", 100f)
+        } else {
+            getFloat("terrain_antenna_height", 2f)
+        }
+    }
+
+    fun getTerrainLosIgnoreNear(): Float {
+        return getFloat("terrain_los_ignore_near", 50f)
+    }
+
+    fun getTerrainLosMargin(): Float {
+        return getFloat("terrain_los_margin", 0f)
     }
 
 }

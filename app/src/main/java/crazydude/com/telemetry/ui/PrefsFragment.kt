@@ -96,6 +96,14 @@ class PrefsFragment : PreferenceFragmentCompat() {
             "terrain_height_limit", 120f, 1f, 10000f,
             "Height above the ground the aircraft is allowed to reach (120 m in the EU open category)"
         )
+        bindNumberPreference(
+            "terrain_antenna_height", 2f, 0f, 1000f,
+            "Height of the antenna the aircraft talks to; used for the minimum line of sight altitude"
+        )
+        bindNumberPreference(
+            "terrain_repeater_height", 100f, 0f, 5000f,
+            "Height of the repeater above the ground at the position of the pilot"
+        )
         updateTerrainInfo()
 
         updateSummary()
@@ -162,8 +170,8 @@ class PrefsFragment : PreferenceFragmentCompat() {
             model.close()
         } else {
             val dir = TerrainLoader.userDirectory(ctx)
-            preference.summary = "Not installed. Height above ground and the altitude limit need a " +
-                    "terrain pack (*.tpk)" + (if (dir != null) " in\n${dir.absolutePath}" else "")
+            preference.summary = "Not installed. Height above ground, altitude limit and line of sight " +
+                    "need a terrain pack (*.tpk)" + (if (dir != null) " in\n${dir.absolutePath}" else "")
         }
     }
 

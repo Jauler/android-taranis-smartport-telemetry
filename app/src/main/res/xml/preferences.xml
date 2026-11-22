@@ -159,6 +159,37 @@
                 android:title="Maximum height above ground"
                 android:key="terrain_height_limit"/>
 
+        <Preference
+                android:title="Receiving antenna height above ground"
+                android:key="terrain_antenna_height"/>
+
+        <SwitchPreference
+                android:title="Use repeater"
+                android:summary="Calculate the line of sight to a repeater above the pilot instead of the ground antenna"
+                android:defaultValue="false"
+                android:key="terrain_repeater_enabled"/>
+
+        <Preference
+                android:title="Repeater height above ground"
+                android:key="terrain_repeater_height"
+                android:dependency="terrain_repeater_enabled"/>
+
+        <ListPreference
+                android:title="Ignore obstacles near the antenna"
+                android:summary="Trees and buildings closer than this to the antenna do not count for the line of sight\n%s"
+                android:entries="@array/TerrainIgnoreNearEntries"
+                android:entryValues="@array/TerrainIgnoreNearValues"
+                android:defaultValue="50"
+                android:key="terrain_los_ignore_near"/>
+
+        <ListPreference
+                android:title="Clearance above obstacles"
+                android:summary="Extra height the line of sight has to keep above trees and buildings\n%s"
+                android:entries="@array/TerrainMarginEntries"
+                android:entryValues="@array/TerrainMarginValues"
+                android:defaultValue="0"
+                android:key="terrain_los_margin"/>
+
     </PreferenceCategory>
 
     <PreferenceCategory android:title="USB Serial">
