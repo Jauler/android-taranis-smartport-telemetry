@@ -19,7 +19,7 @@ class FlightPlanManager(private val context: Context) {
 
     data class FlightPlan(
         val id: String,
-        val name: String,
+        var name: String,
         val waypoints: List<Position>,
         var color: Int = DEFAULT_COLOR,
         var visible: Boolean = true
@@ -98,7 +98,10 @@ class FlightPlanManager(private val context: Context) {
         }
         if (waypoints.size < 2) return null
 
-        val name = fileName.removeSuffix(".csv").removeSuffix(".CSV")
+        val name = fileName.substringAfterLast('/').substringAfterLast(':')
+            .let { if (it.endsWith(".csv", true)) it.dropLast(4) else it }
+            .trim()
+            .ifEmpty { "Flight plan" }
         val id = System.currentTimeMillis().toString()
         val plan = FlightPlan(id, name, waypoints)
 
@@ -111,6 +114,12 @@ class FlightPlanManager(private val context: Context) {
     fun deletePlan(id: String) {
         val plans = getPlans().toMutableList()
         plans.removeAll { it.id == id }
+        savePlans(plans)
+    }
+
+    fun renamePlan(id: String, name: String) {
+        val plans = getPlans().toMutableList()
+        plans.find { it.id == id }?.name = name
         savePlans(plans)
     }
 

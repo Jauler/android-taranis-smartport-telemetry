@@ -102,6 +102,13 @@
                 android:summary="Default color for new flight plans"
                 android:title="Flight plan line color"/>
 
+        <SwitchPreference
+                android:title="Show flight plan names"
+                android:summary="Label every flight plan with its name on the map"
+                android:defaultValue="true"
+                android:key="show_flight_plan_names"
+                android:dependency="show_flight_plans"/>
+
         <Preference
                 android:title="Import flight plan"
                 android:summary="Import a CSV file with waypoints (lat,lon per line)"
@@ -130,6 +137,78 @@
                 app:cpv_allowCustom="true"
                 android:summary="Color of the line between drone and phone"
                 android:title="Home line color"/>
+
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Terrain">
+
+        <Preference
+                android:title="Terrain data"
+                android:summary="Not installed"
+                android:key="terrain_info"/>
+
+        <ListPreference
+                android:title="Altitude sensor shows"
+                android:summary="%s"
+                android:entries="@array/TerrainAltReferenceEntries"
+                android:entryValues="@array/TerrainAltReferenceValues"
+                android:defaultValue="auto"
+                android:key="terrain_alt_reference"/>
+
+        <Preference
+                android:title="Maximum height above ground"
+                android:key="terrain_height_limit"/>
+
+        <Preference
+                android:title="Receiving antenna height above ground"
+                android:key="terrain_antenna_height"/>
+
+        <SwitchPreference
+                android:title="Use repeater"
+                android:summary="Calculate the line of sight to a repeater above the pilot instead of the ground antenna"
+                android:defaultValue="false"
+                android:key="terrain_repeater_enabled"/>
+
+        <Preference
+                android:title="Repeater height above ground"
+                android:key="terrain_repeater_height"
+                android:dependency="terrain_repeater_enabled"/>
+
+        <ListPreference
+                android:title="Ignore obstacles near the antenna"
+                android:summary="Trees and buildings closer than this to the antenna do not count for the line of sight\n%s"
+                android:entries="@array/TerrainIgnoreNearEntries"
+                android:entryValues="@array/TerrainIgnoreNearValues"
+                android:defaultValue="50"
+                android:key="terrain_los_ignore_near"/>
+
+        <ListPreference
+                android:title="Clearance above obstacles"
+                android:summary="Extra height the line of sight has to keep above trees and buildings\n%s"
+                android:entries="@array/TerrainMarginEntries"
+                android:entryValues="@array/TerrainMarginValues"
+                android:defaultValue="0"
+                android:key="terrain_los_margin"/>
+
+        <ListPreference
+                android:title="Populated area warning"
+                android:summary="%s"
+                android:entries="@array/TerrainPopulatedEntries"
+                android:entryValues="@array/TerrainPopulatedValues"
+                android:defaultValue="0"
+                android:key="terrain_populated_warning"/>
+
+        <SwitchPreference
+                android:title="Warn about single farmsteads"
+                android:summary="Treat isolated houses and farms as populated areas too, not only villages and towns"
+                android:defaultValue="false"
+                android:key="terrain_populated_farmsteads"/>
+
+        <SwitchPreference
+                android:title="Voice warnings"
+                android:summary="Announce populated areas, lost line of sight and exceeded height limit"
+                android:defaultValue="true"
+                android:key="terrain_voice_warnings"/>
 
     </PreferenceCategory>
 

@@ -17,6 +17,8 @@ This version adds and changes the following compared to upstream:
 - topological map (OpenTopoMap)
 - satellite map and satellite + streets hybrid map (ESRI, free, no API key required, cacheable offline)
 - flight plan overlay: import a CSV file (lat,lon per line) to draw a planned flight path on the map; multiple plans supported
+- flight plan names on the map, flight plans can be renamed
+- offline terrain: ground elevation with and without trees, height above ground, altitude limit and minimum line of sight altitude sensors, populated area warning (see [doc/terrain.md](doc/terrain.md))
 - GPX export
 - KML export
 - context menu for deleting and renaming logs
@@ -43,6 +45,10 @@ No API keys required for any map type.
 ## Flight plan overlay
 
 Import a CSV file with one `latitude,longitude` coordinate per line. Consecutive points form a path. Multiple CSV files can be imported to display multiple plans simultaneously. Plans are persisted across sessions and can be toggled or deleted from Settings.
+
+## Terrain
+
+With an offline terrain pack the application shows the height above ground, the altitude at which the height above ground limit (120 m) is reached and the lowest altitude with a free line of sight to the receiving antenna, and warns about populated areas. No connection is needed while flying. See [doc/terrain.md](doc/terrain.md).
 
 # Routing telemetry to the application
 

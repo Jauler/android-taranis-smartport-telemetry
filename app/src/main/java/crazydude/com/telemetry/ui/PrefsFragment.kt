@@ -2,7 +2,11 @@ package crazydude.com.telemetry.ui
 
 import android.app.Activity
 import android.content.*
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
+import android.text.InputType
+import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceFragmentCompat
@@ -10,6 +14,7 @@ import crazydude.com.telemetry.R
 import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
 import androidx.preference.ListPreference
+import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.utils.FileLogger
 import java.io.IOException
 
@@ -87,7 +92,103 @@ class PrefsFragment : PreferenceFragmentCompat() {
             }
         }
 
+        bindNumberPreference(
+            "terrain_height_limit", 120f, 1f, 10000f,
+            "Height above the ground the aircraft is allowed to reach (120 m in the EU open category)"
+        )
+        bindNumberPreference(
+            "terrain_antenna_height", 2f, 0f, 1000f,
+            "Height of the antenna the aircraft talks to; used for the minimum line of sight altitude"
+        )
+        bindNumberPreference(
+            "terrain_repeater_height", 100f, 0f, 5000f,
+            "Height of the repeater above the ground at the position of the pilot"
+        )
+        updateTerrainInfo()
+
         updateSummary()
+    }
+
+    private fun formatNumber(value: Float): String {
+        return if (value == Math.rint(value.toDouble()).toFloat()) value.toInt().toString() else value.toString()
+    }
+
+    /**
+     * Turns a plain preference into a "type a number of meters" one. The value is stored as a
+     * string, like the values of the list preferences.
+     */
+    private fun bindNumberPreference(key: String, default: Float, min: Float, max: Float, description: String) {
+        val preference = findPreference(key)
+        val prefs = preferenceManager.sharedPreferences
+
+        fun current(): Float {
+            return prefs.getString(key, null)?.replace(',', '.')?.toFloatOrNull() ?: default
+        }
+
+        fun refresh() {
+            preference.summary = "$description\n${formatNumber(current())} m"
+        }
+
+        refresh()
+        preference.setOnPreferenceClickListener {
+            val editText = EditText(context)
+            editText.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            editText.setText(formatNumber(current()))
+            editText.setSelection(editText.text.length)
+            AlertDialog.Builder(context!!)
+                .setTitle("${preference.title}, m")
+                .setView(editText)
+                .setPositiveButton("OK") { _, _ ->
+                    val value = editText.text.toString().replace(',', '.').toFloatOrNull()
+                    if (value == null || value < min || value > max) {
+                        Toast.makeText(
+                            context,
+                            "Enter a value between ${formatNumber(min)} and ${formatNumber(max)}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        prefs.edit().putString(key, formatNumber(value)).apply()
+                        refresh()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return@setOnPreferenceClickListener true
+        }
+    }
+
+    private fun updateTerrainInfo() {
+        val ctx = context ?: return
+        val preference = findPreference("terrain_info")
+        val model = try {
+            TerrainLoader.open(ctx)
+        } catch (e: Exception) {
+            null
+        }
+        if (model != null) {
+            val layers = ArrayList<String>()
+            layers.add("ground")
+            if (model.hasObjects) layers.add("trees and buildings")
+            if (model.hasPopulatedAreas) layers.add("populated areas")
+            preference.summary = "${model.description}\n(${layers.joinToString(", ")})"
+            model.close()
+        } else {
+            val dir = TerrainLoader.userDirectory(ctx)
+            preference.summary = "Not installed. Height above ground, altitude limit, line of sight and " +
+                    "populated area warnings need a terrain pack (*.tpk)" +
+                    (if (dir != null) " in\n${dir.absolutePath}" else "")
+        }
+    }
+
+    private fun displayName(uri: Uri): String {
+        var name: String? = null
+        try {
+            context!!.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) name = it.getString(0)
+            }
+        } catch (e: Exception) {
+        }
+        return name ?: uri.lastPathSegment ?: "Flight plan"
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -95,7 +196,7 @@ class PrefsFragment : PreferenceFragmentCompat() {
         if (requestCode == REQUEST_IMPORT_FLIGHT_PLAN && resultCode == Activity.RESULT_OK) {
             data?.data?.let { uri ->
                 try {
-                    val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "flight_plan"
+                    val fileName = displayName(uri)
                     val inputStream = context!!.contentResolver.openInputStream(uri)
                     if (inputStream != null) {
                         val plan = flightPlanManager.importFromCsv(inputStream, fileName)
@@ -131,7 +232,7 @@ class PrefsFragment : PreferenceFragmentCompat() {
 
     private fun showFlightPlanOptionsDialog(plan: FlightPlanManager.FlightPlan) {
         val visibilityLabel = if (plan.visible) "Hide" else "Show"
-        val options = arrayOf(visibilityLabel, "Delete")
+        val options = arrayOf(visibilityLabel, "Delete", "Rename")
         AlertDialog.Builder(context!!)
             .setTitle(plan.name)
             .setItems(options) { _, which ->
@@ -146,6 +247,23 @@ class PrefsFragment : PreferenceFragmentCompat() {
                             .setPositiveButton("Delete") { _, _ ->
                                 flightPlanManager.deletePlan(plan.id)
                                 Toast.makeText(context, "Plan deleted", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                    2 -> {
+                        val editText = EditText(context)
+                        editText.setText(plan.name)
+                        editText.setSelection(editText.text.length)
+                        AlertDialog.Builder(context!!)
+                            .setTitle("Rename flight plan")
+                            .setView(editText)
+                            .setPositiveButton("Rename") { _, _ ->
+                                val name = editText.text.toString().trim()
+                                if (name.isNotEmpty()) {
+                                    flightPlanManager.renamePlan(plan.id, name)
+                                    Toast.makeText(context, "Plan renamed", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             .setNegativeButton("Cancel", null)
                             .show()

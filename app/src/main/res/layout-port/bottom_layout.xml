@@ -160,6 +160,91 @@
                     android:textSize="16sp"
                     app:minText="100"/>
 
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/height_above_ground"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="3dp"
+                    android:layout_marginRight="0dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="2dp"
+                    android:drawableTop="@drawable/ic_height_above_ground"
+                    android:drawablePadding="0dp"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textAlignment="center"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="0000 m"/>
+
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/altitude_limit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="3dp"
+                    android:layout_marginRight="0dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="2dp"
+                    android:drawableTop="@drawable/ic_altitude_limit"
+                    android:drawablePadding="0dp"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textAlignment="center"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="0000 m"/>
+
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/min_los_altitude"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="3dp"
+                    android:layout_marginRight="0dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="2dp"
+                    android:drawableTop="@drawable/ic_line_of_sight"
+                    android:drawablePadding="0dp"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textAlignment="center"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="0000 m"/>
+
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/ground_elevation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="3dp"
+                    android:layout_marginRight="0dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="2dp"
+                    android:drawableTop="@drawable/ic_ground_elevation"
+                    android:drawablePadding="0dp"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textAlignment="center"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="0000 m"/>
+
+            <crazydude.com.telemetry.ui.TextViewStableSize
+                    android:id="@+id/surface_elevation"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="3dp"
+                    android:layout_marginRight="0dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="2dp"
+                    android:drawableTop="@drawable/ic_surface_elevation"
+                    android:drawablePadding="0dp"
+                    android:gravity="center_horizontal"
+                    android:text="-"
+                    android:textAlignment="center"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    app:minText="0000 m"/>
+
         </com.nex3z.flowlayout.FlowLayout>
 
     </RelativeLayout>

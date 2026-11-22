@@ -57,6 +57,9 @@ import crazydude.com.telemetry.protocol.pollers.LogPlayer
 import crazydude.com.telemetry.service.DataService
 import kotlinx.android.synthetic.main.top_layout.*
 import kotlinx.android.synthetic.main.view_map.*
+import crazydude.com.telemetry.manager.TerrainMonitor
+import crazydude.com.telemetry.maps.MapLabel
+import crazydude.com.telemetry.terrain.TerrainModel
 import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.tileprovider.tilesource.XYTileSource
@@ -70,7 +73,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 //class MapsActivity : AppCompatActivity(), DataDecoder.Listener {
-class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener, Fr24Manager.Listener {
+class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener, Fr24Manager.Listener, TerrainMonitor.Listener {
 
     companion object {
         private const val REQUEST_ENABLE_BT: Int = 0
@@ -122,6 +125,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         private const val CONNTYPE_BT = 1
         private const val CONNTYPE_BLE = 2
         private const val CONNTYPE_USB = 3
+
+        private const val COLOR_SENSOR_NORMAL = Color.WHITE
+        private const val COLOR_SENSOR_ALERT = 0xFFFF5252.toInt()
+        private const val TERRAIN_VOICE_INTERVAL_MS = 20000L
     }
 
     enum class RequestWritePermissionSequenceType {
@@ -144,9 +151,18 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var ttsReady = false
     private var headingPolyline: MapLine? = null
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
+    private var flightPlanLabels: MutableList<MapLabel> = mutableListOf()
     private var homeLine: MapLine? = null
+    private lateinit var terrainMonitor: TerrainMonitor
+    private var lastTerrainState: TerrainMonitor.State? = null
+    private val terrainVoiceTimes = HashMap<String, Long>()
     private val phoneLocationListener = object : LocationListener {
-        override fun onLocationChanged(location: Location) { runOnUiThread { updateHomeLine() } }
+        override fun onLocationChanged(location: Location) {
+            runOnUiThread {
+                updateHomeLine()
+                updateTerrainAntenna()
+            }
+        }
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         override fun onProviderEnabled(provider: String) {}
         override fun onProviderDisabled(provider: String) {}
@@ -201,6 +217,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var cell_voltage: TextView
     private lateinit var throttle: TextView
     private lateinit var tlmRate: TextView
+    private lateinit var heightAboveGround: TextView
+    private lateinit var altitudeLimit: TextView
+    private lateinit var groundElevation: TextView
+    private lateinit var surfaceElevation: TextView
+    private lateinit var minLosAltitude: TextView
+    private lateinit var terrainWarning: TextView
 
     private lateinit var sensorViewMap: HashMap<String, View>
     private lateinit var sensorsConverters: HashMap<String, Converter>
@@ -263,6 +285,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         setContentView(R.layout.activity_maps)
 
         preferenceManager = PreferenceManager(this)
+        terrainMonitor = TerrainMonitor(applicationContext, preferenceManager, this)
 
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -332,6 +355,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         cell_voltage = findViewById(R.id.cell_voltage)
         throttle = findViewById(R.id.throttle)
         tlmRate = findViewById(R.id.tlm_rate)
+        heightAboveGround = findViewById(R.id.height_above_ground)
+        altitudeLimit = findViewById(R.id.altitude_limit)
+        groundElevation = findViewById(R.id.ground_elevation)
+        surfaceElevation = findViewById(R.id.surface_elevation)
+        minLosAltitude = findViewById(R.id.min_los_altitude)
+        terrainWarning = findViewById(R.id.terrain_warning)
 
         sensorViewMap = hashMapOf(
             Pair(PreferenceManager.sensors.elementAt(0).name, satellites),
@@ -360,8 +389,20 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             Pair(PreferenceManager.sensors.elementAt(23).name, cell_voltage),
             Pair(PreferenceManager.sensors.elementAt(24).name, altitude_msl),
             Pair(PreferenceManager.sensors.elementAt(25).name, throttle),
-            Pair(PreferenceManager.sensors.elementAt(26).name, tlmRate)
+            Pair(PreferenceManager.sensors.elementAt(26).name, tlmRate),
+            Pair(PreferenceManager.SENSOR_HEIGHT_ABOVE_GROUND, heightAboveGround),
+            Pair(PreferenceManager.SENSOR_ALTITUDE_LIMIT, altitudeLimit),
+            Pair(PreferenceManager.SENSOR_MIN_LOS_ALTITUDE, minLosAltitude),
+            Pair(PreferenceManager.SENSOR_GROUND_ELEVATION, groundElevation),
+            Pair(PreferenceManager.SENSOR_SURFACE_ELEVATION, surfaceElevation)
         )
+
+        // Tapping a sensor tells what it shows
+        sensorViewMap.forEach { entry ->
+            entry.value.setOnClickListener {
+                Toast.makeText(this, describeSensor(entry.key), Toast.LENGTH_LONG).show()
+            }
+        }
 
         settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -418,10 +459,14 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             val option4 = "Export GPX file...";
             val option5 = "Export KML file...";
             val option6 = "Set playback duration..."
+            val option7 = "Set takeoff point at UAV location"
 
             var options = arrayOf(option0, option1, option2, option3, option4, option5, option6)
             if ( this.logPlayer == null) {
                 options = arrayOf(option0, option1)
+            }
+            if (terrainMonitor.isAvailable) {
+                options += option7
             }
 
             this.showDialog( AlertDialog.Builder(this)
@@ -449,6 +494,13 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                     }
                     option6 -> {
                         showSetPlaybackDurationDialog()
+                    }
+                    option7 -> {
+                        if (terrainMonitor.setTakeoffHere()) {
+                            Toast.makeText(this, "Altitudes are now relative to the terrain at this point", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this, "Location is unknown", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
                 dialog.dismiss()
@@ -513,6 +565,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         polyLine = null;
         flightPlanLines.forEach { it.remove() }
         flightPlanLines.clear()
+        flightPlanLabels.forEach { it.remove() }
+        flightPlanLabels.clear()
         homeLine?.remove()
         homeLine = null
         marker?.remove();
@@ -613,13 +667,19 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private fun drawFlightPlans() {
         flightPlanLines.forEach { it.remove() }
         flightPlanLines.clear()
+        flightPlanLabels.forEach { it.remove() }
+        flightPlanLabels.clear()
         if (!preferenceManager.isFlightPlansEnabled()) return
+        val showNames = preferenceManager.isFlightPlanNamesEnabled()
         val plans = FlightPlanManager(this).getPlans()
         for (plan in plans) {
             if (!plan.visible || plan.waypoints.size < 2) continue
             val line = map?.addPolyline(4f, preferenceManager.getFlightPlanColor(), *plan.waypoints.toTypedArray())
             if (line != null) {
                 flightPlanLines.add(line)
+            }
+            if (showNames && plan.name.isNotEmpty()) {
+                map?.addLabel(plan.name, plan.waypoints[0])?.let { flightPlanLabels.add(it) }
             }
         }
     }
@@ -873,6 +933,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         secondFlightMode: DataDecoder.Companion.FlyMode?
     ) {
         runOnUiThread {
+            terrainMonitor.onArmedState(armed)
             if (armed) {
                 mode.text = "Armed"
             } else {
@@ -1036,7 +1097,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         bottomList.removeAllViews()
         sensorsSettings.forEach {
             val sensorView = sensorViewMap[it.name]
-            sensorView?.visibility = if (it.shown) View.VISIBLE else View.GONE
+            val usable = terrainMonitor.isAvailable || it.name !in PreferenceManager.terrainSensors
+            sensorView?.visibility = if (it.shown && usable) View.VISIBLE else View.GONE
             if (it.position == "top") {
                 topList.addView(sensorView)
             } else {
@@ -1160,6 +1222,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         updateScreenOrientation()
         drawFlightPlans()
         updateHomeLine()
+        updateTerrainAntenna()
         if (checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, phoneLocationListener)
@@ -1513,6 +1576,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.lastCellVoltage = 0.0f;
         throttle.text = "-"
         tlmRate.text = "0 b/s"
+        terrainMonitor.reset()
     }
 
     private fun bleCheck() =
@@ -1584,6 +1648,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         headingPolyline = null;
         polyLine = null;
         flightPlanLines.clear()
+        flightPlanLabels.clear()
+        terrainMonitor.destroy()
         map?.onDestroy()
         if (!isChangingConfigurations) {
             dataService?.setDataListener(null)
@@ -1698,6 +1764,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.sensorTimeoutManager.onAltitudeData(altitude);
         runOnUiThread {
             this.altitude.text = this.formatHeight(altitude);
+            terrainMonitor.onAltitude(altitude)
         }
     }
 
@@ -2203,6 +2270,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         marker = null
         headingPolyline?.remove()
         headingPolyline = null
+        terrainMonitor.reset()
     }
 
     private fun switchToIdleState() {
@@ -2347,6 +2415,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             this.hasGPSFix = false;
             this.lastTraveledDistance = 0.0
             this.polyLine?.clear()
+            terrainMonitor.reset()
         }
     }
 
@@ -2371,6 +2440,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 lastGPS = Position(0.0,0.0)
             }
             if (hasGPSFix && list.isNotEmpty()) {
+                //the first point of a rebuilt track is where the flight has started
+                terrainMonitor.onAircraftPosition(list[0].lat, list[0].lon)
                 //add all points except last one
                 //last one will be fired in onGPSData()
                 if ( list.size>=2) {
@@ -2422,6 +2493,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 }
                 this.tryCreateMarker()
                 fr24Manager?.updateDronePosition(latitude, longitude)
+                terrainMonitor.onAntennaPosition(antennaPosition())
+                terrainMonitor.onAircraftPosition(latitude, longitude)
             }
         }
     }
@@ -2435,6 +2508,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             this.traveled_distance.text = "-"
             this.lastGPS = Position(0.0, 0.0);
             this.hasGPSFix = false;
+            terrainMonitor.reset()
 
             if (preferenceManager.getConnectionVoiceMessagesEnabled()) {
                 soundPool!!.play(connectedSoundId, 1f, 1f, 0, 0, 1f)
@@ -2914,6 +2988,131 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         val dirs = arrayOf("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
         val index = ((deg + 22.5) / 45.0).toInt() % 8
         return dirs[index]
+    }
+
+    private fun describeSensor(name: String): String {
+        val limit = preferenceManager.getTerrainHeightLimit().roundToInt()
+        val terrain = terrainMonitor.description?.let { "\nTerrain data: $it" } ?: ""
+        return when (name) {
+            "Satellites" -> "GPS satellites in use"
+            "Battery" -> "Battery: capacity drawn or remaining"
+            "Voltage" -> "Battery voltage"
+            "Amperage" -> "Current drawn from the battery"
+            "Speed" -> "Ground speed"
+            "Distance" -> "Distance from the home point"
+            "TraveledDistance" -> "Distance traveled"
+            "Altitude" -> "Altitude reported by the flight controller"
+            "Phone Battery" -> "Battery of this phone"
+            "RC Channels" -> "RC channels"
+            "Rssi" -> "RSSI: signal strength of the radio link"
+            "Uplink SNR" -> "Uplink signal to noise ratio, dB"
+            "Downlink SNR" -> "Downlink signal to noise ratio, dB"
+            "Uplink LQ" -> "Uplink link quality, %"
+            "Downlink LQ" -> "Downlink link quality, %"
+            "ELRS Rate" -> "ExpressLRS packet rate"
+            "Active Antena" -> "Active receiver antenna"
+            "Uplink Power" -> "Transmitter power"
+            "Uplink Antena 1 RSSI, dbm" -> "Uplink RSSI of antenna 1, dBm"
+            "Uplink Antena 2 RSSI, dbm" -> "Uplink RSSI of antenna 2, dBm"
+            "Downlink Antena RSSI, dbm" -> "Downlink RSSI, dBm"
+            "AirSpeed" -> "Airspeed"
+            "Vertical Speed" -> "Vertical speed"
+            "Cell Voltage" -> "Voltage of one battery cell"
+            "Altitude above MSL" -> "GPS altitude above sea level"
+            "Throttle" -> "Throttle"
+            "Telemetry rate" -> "Telemetry data rate"
+            PreferenceManager.SENSOR_HEIGHT_ABOVE_GROUND ->
+                "Height above ground (AGL): how high the aircraft is above the ground right below it. " +
+                        "Red above $limit m.$terrain"
+            PreferenceManager.SENSOR_ALTITUDE_LIMIT ->
+                "Altitude limit: the altitude at which the aircraft is $limit m above the ground " +
+                        "at its current position.$terrain"
+            PreferenceManager.SENSOR_MIN_LOS_ALTITUDE ->
+                "Minimum line of sight altitude: the lowest altitude here with nothing (ground, trees, " +
+                        "buildings) between the aircraft and the receiving antenna. Red when the aircraft " +
+                        "is below it.$terrain"
+            PreferenceManager.SENSOR_GROUND_ELEVATION ->
+                "Ground elevation: height above sea level of the ground right below the aircraft.$terrain"
+            PreferenceManager.SENSOR_SURFACE_ELEVATION ->
+                "Elevation with trees and buildings: height above sea level of the top of the highest " +
+                        "tree or building right below the aircraft. Minus the ground elevation it is " +
+                        "the height of the trees.$terrain"
+            else -> name
+        }
+    }
+
+    // --- Terrain: height above ground, altitude limit, line of sight, populated areas ---
+
+    /**
+     * Where the receiving antenna is: at the phone. A replayed log does not tell where the phone
+     * was during the flight and the phone may be anywhere now, so the takeoff point is used then
+     * (the terrain monitor falls back to it when there is no antenna position).
+     */
+    private fun antennaPosition(): Position? {
+        return if (isInReplayMode()) null else map?.getMyLocation()
+    }
+
+    private fun updateTerrainAntenna() {
+        terrainMonitor.onAntennaPosition(antennaPosition())
+        terrainMonitor.requestUpdate()
+    }
+
+    private fun formatTerrainHeight(v: Float): String {
+        return when {
+            v.isNaN() -> "-"
+            v > 2000f -> ">2 km"
+            else -> "${v.roundToInt()} m"
+        }
+    }
+
+    override fun onTerrainState(state: TerrainMonitor.State) {
+        val previous = lastTerrainState
+        lastTerrainState = state
+
+        heightAboveGround.text = formatTerrainHeight(state.heightAboveGround)
+        heightAboveGround.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
+        altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)
+        altitudeLimit.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
+        groundElevation.text = formatTerrainHeight(state.groundElevation)
+        surfaceElevation.text = formatTerrainHeight(state.surfaceElevation)
+        minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
+        minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
+
+        val warnings = ArrayList<String>()
+        when (state.populated) {
+            TerrainModel.POPULATED_INSIDE -> warnings.add("POPULATED AREA")
+            TerrainModel.POPULATED_NEAR -> warnings.add("POPULATED AREA NEARBY")
+        }
+        if (state.belowLos) warnings.add("NO LINE OF SIGHT")
+        // Exceeding the height limit is not put on the map: the red readouts tell it already
+        if (warnings.isEmpty()) {
+            terrainWarning.visibility = View.GONE
+        } else {
+            terrainWarning.text = warnings.joinToString("\n")
+            terrainWarning.visibility = View.VISIBLE
+        }
+
+        // Voice: only on the moment a warning appears, and not while a log is being replayed
+        if (isInReplayMode() || !preferenceManager.isTerrainVoiceWarningsEnabled()) return
+        val wasPopulated = previous != null && previous.populated > TerrainModel.POPULATED_NONE
+        if (state.populated > TerrainModel.POPULATED_NONE && !wasPopulated) {
+            speakTerrainWarning("populated", "Warning, populated area")
+        }
+        if (state.belowLos && previous?.belowLos != true) {
+            speakTerrainWarning("los", "Warning, no line of sight")
+        }
+        if (state.aboveLimit && previous?.aboveLimit != true) {
+            speakTerrainWarning("limit", "Warning, height limit exceeded")
+        }
+    }
+
+    private fun speakTerrainWarning(kind: String, text: String) {
+        if (!ttsReady) return
+        val now = System.currentTimeMillis()
+        val last = terrainVoiceTimes[kind] ?: 0L
+        if (now - last < TERRAIN_VOICE_INTERVAL_MS) return
+        terrainVoiceTimes[kind] = now
+        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "terrain_$kind")
     }
 
 }

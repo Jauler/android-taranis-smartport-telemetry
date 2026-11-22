@@ -14,34 +14,52 @@ class PreferenceManager(context: Context) {
     private val defaultHomeLineColor = context.resources.getColor(R.color.colorHomeLine)
 
     companion object {
+        const val SENSOR_HEIGHT_ABOVE_GROUND = "Height above ground"
+        const val SENSOR_ALTITUDE_LIMIT = "Altitude limit"
+        const val SENSOR_MIN_LOS_ALTITUDE = "Min line of sight altitude"
+        const val SENSOR_GROUND_ELEVATION = "Ground elevation"
+        const val SENSOR_SURFACE_ELEVATION = "Elevation with trees and buildings"
+
         val sensors = setOf(
+            // The index is the place within the bar; the order of the entries must not change
             SensorSetting("Satellites", 1),
-            SensorSetting("Battery", 2),
-            SensorSetting("Voltage", 3),
-            SensorSetting("Amperage", 4),
-            SensorSetting("Speed", 0, "bottom"),
-            SensorSetting("Distance", 1, "bottom"),
-            SensorSetting("TraveledDistance", 2, "bottom"),
-            SensorSetting("Altitude", 3, "bottom"),
-            SensorSetting("Phone Battery", 5),
-            SensorSetting("RC Channels", 4, "bottom", false),
-            SensorSetting("Rssi", 0 ),
-            SensorSetting("Uplink SNR", 6, "top", false ),
-            SensorSetting("Downlink SNR", 7, "top", false ),
-            SensorSetting("Uplink LQ", 8, "top", false ),
-            SensorSetting("Downlink LQ", 9, "top", false ),
-            SensorSetting("ELRS Rate", 10, "top", false ),
-            SensorSetting("Active Antena", 11, "top", false ),
-            SensorSetting("Uplink Power", 12, "top", false ),
-            SensorSetting("Uplink Antena 1 RSSI, dbm", 13, "top", false ),
-            SensorSetting("Uplink Antena 2 RSSI, dbm", 14, "top", false ),
-            SensorSetting("Downlink Antena RSSI, dbm", 15, "top", false ),
-            SensorSetting("AirSpeed", 5, "bottom", false),
-            SensorSetting("Vertical Speed", 6, "bottom", false),
-            SensorSetting("Cell Voltage", 16, "top", false ),
-            SensorSetting("Altitude above MSL", 7, "bottom", false),
-            SensorSetting("Throttle", 8, "bottom", false),
-            SensorSetting("Telemetry rate", 17, "top", false )
+            SensorSetting("Battery", 4),
+            SensorSetting("Voltage", 5),
+            SensorSetting("Amperage", 6),
+            SensorSetting("Speed", 2),
+            SensorSetting("Distance", 0, "bottom"),
+            SensorSetting("TraveledDistance", 3),
+            SensorSetting("Altitude", 1, "bottom"),
+            SensorSetting("Phone Battery", 7, "top", false),
+            SensorSetting("RC Channels", 2, "bottom", false),
+            SensorSetting("Rssi", 0),
+            SensorSetting("Uplink SNR", 8, "top", false),
+            SensorSetting("Downlink SNR", 9, "top", false),
+            SensorSetting("Uplink LQ", 10, "top", false),
+            SensorSetting("Downlink LQ", 11, "top", false),
+            SensorSetting("ELRS Rate", 12, "top", false),
+            SensorSetting("Active Antena", 13, "top", false),
+            SensorSetting("Uplink Power", 14, "top", false),
+            SensorSetting("Uplink Antena 1 RSSI, dbm", 15, "top", false),
+            SensorSetting("Uplink Antena 2 RSSI, dbm", 16, "top", false),
+            SensorSetting("Downlink Antena RSSI, dbm", 17, "top", false),
+            SensorSetting("AirSpeed", 3, "bottom", false),
+            SensorSetting("Vertical Speed", 4, "bottom", false),
+            SensorSetting("Cell Voltage", 18, "top", false),
+            SensorSetting("Altitude above MSL", 5, "bottom", false),
+            SensorSetting("Throttle", 6, "bottom", false),
+            SensorSetting("Telemetry rate", 19, "top", false),
+            SensorSetting(SENSOR_HEIGHT_ABOVE_GROUND, 7, "bottom"),
+            SensorSetting(SENSOR_ALTITUDE_LIMIT, 8, "bottom"),
+            SensorSetting(SENSOR_MIN_LOS_ALTITUDE, 9, "bottom"),
+            SensorSetting(SENSOR_GROUND_ELEVATION, 10, "bottom"),
+            SensorSetting(SENSOR_SURFACE_ELEVATION, 11, "bottom")
+        )
+
+        /** Sensors which only work with terrain data; hidden when there is none. */
+        val terrainSensors = setOf(
+            SENSOR_HEIGHT_ABOVE_GROUND, SENSOR_ALTITUDE_LIMIT, SENSOR_MIN_LOS_ALTITUDE, SENSOR_GROUND_ELEVATION,
+            SENSOR_SURFACE_ELEVATION
         )
     }
 
@@ -236,6 +254,64 @@ class PreferenceManager(context: Context) {
 
     fun getFr24PollIntervalSec(): Int {
         return sharedPreferences.getString("fr24_poll_interval", "10")?.toIntOrNull() ?: 10
+    }
+
+    fun isFlightPlanNamesEnabled(): Boolean {
+        return sharedPreferences.getBoolean("show_flight_plan_names", true)
+    }
+
+    // --- Terrain ---
+
+    private fun getFloat(key: String, default: Float): Float {
+        return sharedPreferences.getString(key, null)?.replace(',', '.')?.toFloatOrNull() ?: default
+    }
+
+    /**
+     * "takeoff": the altitude sensor is relative to the takeoff point; "msl": above sea level;
+     * "auto": detect which of the two it is.
+     */
+    fun getTerrainAltitudeReference(): String {
+        return sharedPreferences.getString("terrain_alt_reference", "auto") ?: "auto"
+    }
+
+    /** Maximum allowed height above ground, meters. */
+    fun getTerrainHeightLimit(): Float {
+        return getFloat("terrain_height_limit", 120f)
+    }
+
+    fun isTerrainRepeaterEnabled(): Boolean {
+        return sharedPreferences.getBoolean("terrain_repeater_enabled", false)
+    }
+
+    /** Height above ground of the antenna the aircraft talks to: the repeater when enabled. */
+    fun getTerrainAntennaHeight(): Float {
+        return if (isTerrainRepeaterEnabled()) {
+            getFloat("terrain_repeater_height", 100f)
+        } else {
+            getFloat("terrain_antenna_height", 2f)
+        }
+    }
+
+    fun getTerrainLosIgnoreNear(): Float {
+        return getFloat("terrain_los_ignore_near", 50f)
+    }
+
+    fun getTerrainLosMargin(): Float {
+        return getFloat("terrain_los_margin", 0f)
+    }
+
+    /** Distance at which a populated area triggers the warning; negative: warning disabled. */
+    fun getTerrainPopulatedRadius(): Float {
+        return getFloat("terrain_populated_warning", 0f)
+    }
+
+    /** Whether single farmsteads count as populated areas (settlements always do). */
+    fun isTerrainFarmsteadWarningEnabled(): Boolean {
+        return sharedPreferences.getBoolean("terrain_populated_farmsteads", false)
+    }
+
+    fun isTerrainVoiceWarningsEnabled(): Boolean {
+        return sharedPreferences.getBoolean("terrain_voice_warnings", true)
     }
 
 }

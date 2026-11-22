@@ -47,6 +47,11 @@ android {
         abortOnError false
     }
 
+    aaptOptions {
+        // The terrain pack is compressed internally and is read in place from the APK
+        noCompress 'tpk'
+    }
+
     sourceSets {
         main {
             proto {
@@ -84,6 +89,7 @@ dependencies {
     implementation 'org.osmdroid:osmdroid-android:6.1.20'
     implementation 'com.google.protobuf:protobuf-javalite:3.21.12'
     //testImplementation 'deviandroidx.test:core:1.2.0'
+    testImplementation 'junit:junit:4.12'
     testImplementation 'org.mockito:mockito-core:1.10.19'
 	implementation 'com.google.android:flexbox:2.0.1'
 }
