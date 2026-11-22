@@ -54,6 +54,12 @@ android {
             }
         }
     }
+
+    // Expose the final (suffixed) application ID to resources, so XML intents
+    // such as the one in preferences.xml target the right package per variant.
+    applicationVariants.all { variant ->
+        variant.resValue "string", "app_package", variant.applicationId
+    }
 }
 
 protobuf {
