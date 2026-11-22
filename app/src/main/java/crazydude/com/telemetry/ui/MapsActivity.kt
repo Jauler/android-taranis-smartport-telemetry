@@ -127,7 +127,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
         private const val COLOR_SENSOR_NORMAL = Color.WHITE
         private const val COLOR_SENSOR_ALERT = 0xFFFF5252.toInt()
-        private const val TERRAIN_VOICE_INTERVAL_MS = 20000L
     }
 
     enum class RequestWritePermissionSequenceType {
@@ -153,8 +152,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var flightPlanLabels: MutableList<MapLabel> = mutableListOf()
     private var homeLine: MapLine? = null
     private lateinit var terrainMonitor: TerrainMonitor
-    private var lastTerrainState: TerrainMonitor.State? = null
-    private val terrainVoiceTimes = HashMap<String, Long>()
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) { runOnUiThread { updateHomeLine() } }
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -2998,29 +2995,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     override fun onTerrainState(state: TerrainMonitor.State) {
-        val previous = lastTerrainState
-        lastTerrainState = state
-
         heightAboveGround.text = formatTerrainHeight(state.heightAboveGround)
         heightAboveGround.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)
         altitudeLimit.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         groundElevation.text = formatTerrainHeight(state.groundElevation)
-
-        // Voice: only on the moment the limit is exceeded, and not while a log is being replayed
-        if (isInReplayMode() || !preferenceManager.isTerrainVoiceWarningsEnabled()) return
-        if (state.aboveLimit && previous?.aboveLimit != true) {
-            speakTerrainWarning("limit", "Warning, height limit exceeded")
-        }
-    }
-
-    private fun speakTerrainWarning(kind: String, text: String) {
-        if (!ttsReady) return
-        val now = System.currentTimeMillis()
-        val last = terrainVoiceTimes[kind] ?: 0L
-        if (now - last < TERRAIN_VOICE_INTERVAL_MS) return
-        terrainVoiceTimes[kind] = now
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "terrain_$kind")
     }
 
 }

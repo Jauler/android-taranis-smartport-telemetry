@@ -271,8 +271,4 @@ class PreferenceManager(context: Context) {
         return getFloat("terrain_height_limit", 120f)
     }
 
-    fun isTerrainVoiceWarningsEnabled(): Boolean {
-        return sharedPreferences.getBoolean("terrain_voice_warnings", true)
-    }
-
 }

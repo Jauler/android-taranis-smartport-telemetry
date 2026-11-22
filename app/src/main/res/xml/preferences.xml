@@ -159,12 +159,6 @@
                 android:title="Maximum height above ground"
                 android:key="terrain_height_limit"/>
 
-        <SwitchPreference
-                android:title="Voice warnings"
-                android:summary="Announce an exceeded height limit"
-                android:defaultValue="true"
-                android:key="terrain_voice_warnings"/>
-
     </PreferenceCategory>
 
     <PreferenceCategory android:title="USB Serial">

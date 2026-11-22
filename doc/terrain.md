@@ -12,9 +12,9 @@ With a terrain pack present the application shows:
 | Ground elevation | Elevation above sea level of the ground right below the aircraft. |
 | Altitude limit | The altitude, as shown by the altitude sensor, at which the aircraft reaches the height above ground limit (120 m by default). If the ground below the aircraft is 30 m higher than the takeoff point, the limit reads 150 m. |
 
-Above the height limit the two height readouts turn red and there is a voice warning. The
-readouts are ordinary sensors and can be moved or hidden in *Settings > Sensor display
-settings*. Without a terrain pack they are hidden.
+Above the height limit the two height readouts turn red. The readouts are ordinary sensors
+and can be moved or hidden in *Settings > Sensor display settings*. Without a terrain pack they
+are hidden.
 
 ## How the values are calculated
 
