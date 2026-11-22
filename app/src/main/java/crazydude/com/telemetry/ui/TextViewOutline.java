@@ -26,6 +26,9 @@ public class TextViewOutline extends AppCompatTextView {
     private float mShadowDx;
     private float mShadowDy;
     private int mShadowColor;
+    // True while onMeasure/onDraw temporarily swap paint colors; suppresses the
+    // invalidate() those swaps trigger, which would otherwise redraw every frame.
+    private boolean mSwappingPaint;
 
     public TextViewOutline(Context context) {
         this(context, null);
@@ -96,7 +99,12 @@ public class TextViewOutline extends AppCompatTextView {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setPaintToOutline();
+        mSwappingPaint = true;
+        try {
+            setPaintToOutline();
+        } finally {
+            mSwappingPaint = false;
+        }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         int outlineWidth = this.dpToPx(mOutlineSize, getContext());
@@ -130,10 +138,23 @@ public class TextViewOutline extends AppCompatTextView {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        setPaintToOutline();
-        super.onDraw(canvas);
-        setPaintToRegular();
-        super.onDraw(canvas);
+        mSwappingPaint = true;
+        try {
+            setPaintToOutline();
+            super.onDraw(canvas);
+            setPaintToRegular();
+            super.onDraw(canvas);
+        } finally {
+            mSwappingPaint = false;
+        }
+    }
+
+    @Override
+    public void invalidate() {
+        if (mSwappingPaint) {
+            return;
+        }
+        super.invalidate();
     }
 
 }
