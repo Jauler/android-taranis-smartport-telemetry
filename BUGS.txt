@@ -1,0 +1,68 @@
+Known bugs
+==========
+
+
+1. Takeoff point is lost on reconnect, decoder restart or screen rotation mid-flight
+-----------------------------------------------------------------------------------
+
+Area: terrain readouts (height above ground, altitude limit)
+Files: manager/TerrainMonitor.kt, ui/MapsActivity.kt
+
+What happens:
+  The height above ground is computed relative to the ground at the takeoff
+  point. When, during a flight, the telemetry link drops and reconnects, the
+  decoder restarts, a replay is seeked, or the screen is rotated, the takeoff
+  point is forgotten and the next GPS position, taken while the aircraft is in
+  the air, becomes the new takeoff point. A takeoff point set by hand ("Set
+  takeoff point at UAV location") is lost as well.
+
+Why:
+  - onConnected() and onDecoderRestart() in MapsActivity call
+    terrainMonitor.reset(), which clears `takeoff` and `takeoffLocked`.
+  - TerrainMonitor lives in the Activity and is created in onCreate(), so a
+    rotation (no configChanges in the manifest) starts a fresh monitor with
+    no takeoff point. DataService keeps the connection and the track, but
+    onServiceConnected() does not hand the track's first point to the new
+    monitor.
+
+Example:
+  Takeoff from a field at 100 m above sea level. The aircraft flies at 100 m
+  (relative) over a hill whose ground is at 160 m, then the link drops and
+  comes back. The hilltop becomes the takeoff point:
+    shown AGL = 100 + 160 - 160 = 100 m, true AGL = 100 + 100 - 160 = 40 m.
+  Back over the valley (ground 60 m) it shows 200 m: a false "height limit
+  exceeded". Over lower ground the error goes the other way and the limit
+  warning is suppressed.
+
+Suggested fix:
+  Keep the takeoff point (and the manual lock) for the whole session: across
+  reconnects, decoder restarts and activity recreation, e.g. hold it in
+  DataService or seed a new monitor from dataService.points.first() and the
+  armed state in onServiceConnected(). Clear it only when a new session starts
+  (idle state, new replay).
+
+
+2. Every screen rotation leaks the open terrain pack
+----------------------------------------------------
+
+Area: terrain pack loading
+Files: manager/TerrainMonitor.kt, terrain/TerrainPack.kt
+
+What happens:
+  Each MapsActivity creates a TerrainMonitor, which opens the terrain pack
+  (a RandomAccessFile/FileChannel, or an AssetFileDescriptor for the bundled
+  pack) and one java.util.zip.Inflater per layer. TerrainMonitor.destroy()
+  stops the worker thread but never closes the model, and the inflaters are
+  never end()-ed. Every rotation, and every other recreation of the activity,
+  leaves one more open file descriptor and its native zlib memory behind
+  until the garbage collector or the process death frees them.
+
+Effect:
+  Over a long session with many rotations, file descriptors and native memory
+  pile up; with a large pack this can end in fd exhaustion or a native
+  out-of-memory error.
+
+Suggested fix:
+  In destroy(), post model?.close() to the worker thread before quitSafely()
+  (so it cannot race with a running compute), and give RasterLayer a close()
+  that calls inflater.end(), called from TerrainPack.close().
