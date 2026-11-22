@@ -102,6 +102,13 @@
                 android:summary="Default color for new flight plans"
                 android:title="Flight plan line color"/>
 
+        <SwitchPreference
+                android:title="Show flight plan names"
+                android:summary="Label every flight plan with its name on the map"
+                android:defaultValue="true"
+                android:key="show_flight_plan_names"
+                android:dependency="show_flight_plans"/>
+
         <Preference
                 android:title="Import flight plan"
                 android:summary="Import a CSV file with waypoints (lat,lon per line)"

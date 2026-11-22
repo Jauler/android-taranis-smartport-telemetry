@@ -2,7 +2,10 @@ package crazydude.com.telemetry.ui
 
 import android.app.Activity
 import android.content.*
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
+import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceFragmentCompat
@@ -90,12 +93,23 @@ class PrefsFragment : PreferenceFragmentCompat() {
         updateSummary()
     }
 
+    private fun displayName(uri: Uri): String {
+        var name: String? = null
+        try {
+            context!!.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) name = it.getString(0)
+            }
+        } catch (e: Exception) {
+        }
+        return name ?: uri.lastPathSegment ?: "Flight plan"
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_IMPORT_FLIGHT_PLAN && resultCode == Activity.RESULT_OK) {
             data?.data?.let { uri ->
                 try {
-                    val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "flight_plan"
+                    val fileName = displayName(uri)
                     val inputStream = context!!.contentResolver.openInputStream(uri)
                     if (inputStream != null) {
                         val plan = flightPlanManager.importFromCsv(inputStream, fileName)
@@ -131,7 +145,7 @@ class PrefsFragment : PreferenceFragmentCompat() {
 
     private fun showFlightPlanOptionsDialog(plan: FlightPlanManager.FlightPlan) {
         val visibilityLabel = if (plan.visible) "Hide" else "Show"
-        val options = arrayOf(visibilityLabel, "Delete")
+        val options = arrayOf(visibilityLabel, "Delete", "Rename")
         AlertDialog.Builder(context!!)
             .setTitle(plan.name)
             .setItems(options) { _, which ->
@@ -146,6 +160,23 @@ class PrefsFragment : PreferenceFragmentCompat() {
                             .setPositiveButton("Delete") { _, _ ->
                                 flightPlanManager.deletePlan(plan.id)
                                 Toast.makeText(context, "Plan deleted", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                    2 -> {
+                        val editText = EditText(context)
+                        editText.setText(plan.name)
+                        editText.setSelection(editText.text.length)
+                        AlertDialog.Builder(context!!)
+                            .setTitle("Rename flight plan")
+                            .setView(editText)
+                            .setPositiveButton("Rename") { _, _ ->
+                                val name = editText.text.toString().trim()
+                                if (name.isNotEmpty()) {
+                                    flightPlanManager.renamePlan(plan.id, name)
+                                    Toast.makeText(context, "Plan renamed", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             .setNegativeButton("Cancel", null)
                             .show()

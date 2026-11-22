@@ -16,6 +16,7 @@ interface MapWrapper {
     fun addPolyline(width: Float, color: Int, vararg points: Position): MapLine
     fun setOnCameraMoveStartedListener(function: () -> Unit)
     fun addPolyline(color: Int): MapLine
+    fun addLabel(text: String, position: Position): MapLabel
 
     fun getMapOrientation(): Float
     fun resetMapOrientation()

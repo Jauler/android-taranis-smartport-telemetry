@@ -3,6 +3,7 @@ package crazydude.com.telemetry.maps.osm
 import android.content.Context
 import android.os.Bundle
 import android.preference.PreferenceManager
+import crazydude.com.telemetry.maps.MapLabel
 import crazydude.com.telemetry.maps.MapLine
 import crazydude.com.telemetry.maps.MapMarker
 import crazydude.com.telemetry.maps.MapWrapper
@@ -119,6 +120,10 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         osmLine.addPoints(points.toList())
         osmLine.color = color;
         return osmLine
+    }
+
+    override fun addLabel(text: String, position: Position): MapLabel {
+        return OsmLabel(text, position, mapView)
     }
 
     private var onCameraMoveListener: (() -> Unit)? = null

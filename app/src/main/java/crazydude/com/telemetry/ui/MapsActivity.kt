@@ -46,6 +46,7 @@ import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.Fr24Manager
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.manager.SensorTimeoutManager
+import crazydude.com.telemetry.maps.MapLabel
 import crazydude.com.telemetry.maps.MapLine
 import crazydude.com.telemetry.maps.MapMarker
 import crazydude.com.telemetry.maps.MapWrapper
@@ -144,6 +145,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var ttsReady = false
     private var headingPolyline: MapLine? = null
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
+    private var flightPlanLabels: MutableList<MapLabel> = mutableListOf()
     private var homeLine: MapLine? = null
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) { runOnUiThread { updateHomeLine() } }
@@ -515,6 +517,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         polyLine = null;
         flightPlanLines.forEach { it.remove() }
         flightPlanLines.clear()
+        flightPlanLabels.forEach { it.remove() }
+        flightPlanLabels.clear()
         homeLine?.remove()
         homeLine = null
         marker?.remove();
@@ -622,13 +626,19 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private fun drawFlightPlans() {
         flightPlanLines.forEach { it.remove() }
         flightPlanLines.clear()
+        flightPlanLabels.forEach { it.remove() }
+        flightPlanLabels.clear()
         if (!preferenceManager.isFlightPlansEnabled()) return
+        val showNames = preferenceManager.isFlightPlanNamesEnabled()
         val plans = FlightPlanManager(this).getPlans()
         for (plan in plans) {
             if (!plan.visible || plan.waypoints.size < 2) continue
             val line = map?.addPolyline(4f, preferenceManager.getFlightPlanColor(), *plan.waypoints.toTypedArray())
             if (line != null) {
                 flightPlanLines.add(line)
+            }
+            if (showNames && plan.name.isNotEmpty()) {
+                map?.addLabel(plan.name, plan.waypoints[0])?.let { flightPlanLabels.add(it) }
             }
         }
     }
@@ -1593,6 +1603,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         headingPolyline = null;
         polyLine = null;
         flightPlanLines.clear()
+        flightPlanLabels.clear()
         map?.onDestroy()
         if (!isChangingConfigurations) {
             dataService?.setDataListener(null)

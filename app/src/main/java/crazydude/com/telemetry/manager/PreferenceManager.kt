@@ -238,4 +238,8 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getString("fr24_poll_interval", "10")?.toIntOrNull() ?: 10
     }
 
+    fun isFlightPlanNamesEnabled(): Boolean {
+        return sharedPreferences.getBoolean("show_flight_plan_names", true)
+    }
+
 }
