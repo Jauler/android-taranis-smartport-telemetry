@@ -163,17 +163,6 @@
                 android:title="Receiving antenna height above ground"
                 android:key="terrain_antenna_height"/>
 
-        <SwitchPreference
-                android:title="Use repeater"
-                android:summary="Calculate the line of sight to a repeater above the pilot instead of the ground antenna"
-                android:defaultValue="false"
-                android:key="terrain_repeater_enabled"/>
-
-        <Preference
-                android:title="Repeater height above ground"
-                android:key="terrain_repeater_height"
-                android:dependency="terrain_repeater_enabled"/>
-
         <ListPreference
                 android:title="Ignore obstacles near the antenna"
                 android:summary="Trees and buildings closer than this to the antenna do not count for the line of sight\n%s"

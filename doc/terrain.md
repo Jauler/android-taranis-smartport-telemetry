@@ -28,8 +28,8 @@ are hidden.
   *Settings > Terrain > Altitude sensor shows* to *Altitude above sea level* for those.
 * The receiving antenna is assumed to be where the phone is (where the aircraft took off if
   the phone has no location fix, and always when a log is replayed, as the phone may be
-  anywhere by then), at *Receiving antenna height above ground*. With
-  *Use repeater* the line of sight is calculated to *Repeater height above ground* instead.
+  anywhere by then), at *Receiving antenna height above ground* (set it to the height of a
+  repeater above the pilot when one is used).
 * The line between the antenna and the aircraft is sampled every half cell of the tree and
   building layer (10 m). For every sample the
   altitude needed to look over it from the antenna is extrapolated to the aircraft position;

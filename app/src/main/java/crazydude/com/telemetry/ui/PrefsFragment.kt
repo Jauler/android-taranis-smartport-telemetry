@@ -97,12 +97,9 @@ class PrefsFragment : PreferenceFragmentCompat() {
             "Height above the ground the aircraft is allowed to reach (120 m in the EU open category)"
         )
         bindNumberPreference(
-            "terrain_antenna_height", 2f, 0f, 1000f,
-            "Height of the antenna the aircraft talks to; used for the minimum line of sight altitude"
-        )
-        bindNumberPreference(
-            "terrain_repeater_height", 100f, 0f, 5000f,
-            "Height of the repeater above the ground at the position of the pilot"
+            "terrain_antenna_height", 2f, 0f, 5000f,
+            "Height of the antenna the aircraft talks to (e.g. a repeater above the pilot); used for " +
+                    "the minimum line of sight altitude"
         )
         bindNumberPreference(
             "terrain_los_warn_min_distance", 200f, 0f, 100000f,

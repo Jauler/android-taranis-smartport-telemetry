@@ -275,17 +275,9 @@ class PreferenceManager(context: Context) {
         return getFloat("terrain_height_limit", 120f)
     }
 
-    fun isTerrainRepeaterEnabled(): Boolean {
-        return sharedPreferences.getBoolean("terrain_repeater_enabled", false)
-    }
-
-    /** Height above ground of the antenna the aircraft talks to: the repeater when enabled. */
+    /** Height above ground of the antenna the aircraft talks to. */
     fun getTerrainAntennaHeight(): Float {
-        return if (isTerrainRepeaterEnabled()) {
-            getFloat("terrain_repeater_height", 100f)
-        } else {
-            getFloat("terrain_antenna_height", 2f)
-        }
+        return getFloat("terrain_antenna_height", 2f)
     }
 
     fun getTerrainLosIgnoreNear(): Float {
