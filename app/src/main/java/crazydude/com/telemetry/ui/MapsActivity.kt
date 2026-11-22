@@ -217,7 +217,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var altitudeLimit: TextView
     private lateinit var groundElevation: TextView
     private lateinit var minLosAltitude: TextView
-    private lateinit var terrainWarning: TextView
 
     private lateinit var sensorViewMap: HashMap<String, View>
     private lateinit var sensorsConverters: HashMap<String, Converter>
@@ -356,7 +355,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         altitudeLimit = findViewById(R.id.altitude_limit)
         groundElevation = findViewById(R.id.ground_elevation)
         minLosAltitude = findViewById(R.id.min_los_altitude)
-        terrainWarning = findViewById(R.id.terrain_warning)
 
         sensorViewMap = hashMapOf(
             Pair(PreferenceManager.sensors.elementAt(0).name, satellites),
@@ -3027,9 +3025,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         groundElevation.text = formatTerrainHeight(state.groundElevation)
         minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
         minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
-
-        // Exceeding the height limit is not put on the map: the red readouts tell it already
-        terrainWarning.visibility = if (state.belowLos) View.VISIBLE else View.GONE
     }
 
 }

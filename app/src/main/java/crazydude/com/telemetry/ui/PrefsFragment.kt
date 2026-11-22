@@ -103,7 +103,7 @@ class PrefsFragment : PreferenceFragmentCompat() {
         )
         bindNumberPreference(
             "terrain_los_warn_min_distance", 200f, 0f, 100000f,
-            "No line of sight warning while the aircraft is closer than this to the home point"
+            "The line of sight readout does not turn red while the aircraft is closer than this to the home point"
         )
         updateTerrainInfo()
 

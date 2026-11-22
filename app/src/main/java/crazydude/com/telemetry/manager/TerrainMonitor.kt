@@ -255,7 +255,7 @@ class TerrainMonitor(
             }
         }
 
-        // No line of sight warning close to home: on the ground before takeoff and after landing,
+        // Not below the line of sight close to home: on the ground before takeoff and after landing,
         // and while climbing out, trees and buildings around the pilot would trigger it all the time
         val home = input.takeoff ?: input.antenna
         val homeDistance = if (home != null) {

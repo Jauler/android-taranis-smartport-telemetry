@@ -103,24 +103,6 @@
                 app:outlineColor="@android:color/black"
                 app:outlineSize="3dp" />
 
-        <crazydude.com.telemetry.ui.TextViewOutline
-                android:id="@+id/terrain_warning"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentTop="true"
-                android:layout_centerHorizontal="true"
-                android:layout_marginTop="36dp"
-                android:gravity="center_horizontal"
-                android:textAlignment="center"
-                android:text="NO LINE OF SIGHT"
-                android:textColor="#FFFF5252"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:visibility="gone"
-                app:outlineColor="@android:color/black"
-                app:outlineSize="3dp"
-                tools:visibility="visible" />
-
         <com.google.android.flexbox.FlexboxLayout xmlns:android="http://schemas.android.com/apk/res/android"
                 xmlns:app="http://schemas.android.com/apk/res-auto"
                 android:id="@+id/buttons_box"

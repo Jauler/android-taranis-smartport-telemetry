@@ -14,9 +14,8 @@ With a terrain pack present the application shows:
 | Min line of sight altitude | The lowest altitude, as shown by the altitude sensor, at which nothing (ground, trees, buildings) stands between the aircraft and the receiving antenna. |
 
 Above the height limit the two height readouts turn red. Below the line of sight altitude that
-readout turns red and "NO LINE OF SIGHT" is shown on the map. The readouts are ordinary sensors
-and can be moved or hidden in *Settings > Sensor display settings*. Without a terrain pack they
-are hidden.
+readout turns red. The readouts are ordinary sensors and can be moved or hidden in
+*Settings > Sensor display settings*. Without a terrain pack they are hidden.
 
 ## How the values are calculated
 
@@ -37,7 +36,7 @@ are hidden.
   for radio links); Fresnel zone clearance is not, use *Clearance above obstacles* for margin.
 * Trees a few meters from the pilot would shade the whole horizon, so obstacles closer than
   *Ignore obstacles near the antenna* (50 m by default) are skipped.
-* There is no line of sight warning (red readout, map text) while the aircraft is closer
+* The line of sight readout does not turn red while the aircraft is closer
   than *Line of sight warning distance* (200 m by default) to the home point (the takeoff point,
   or the antenna if that is not known): on the ground and while climbing out the obstacles
   around the pilot would trigger it all the time. The readout itself is still shown.

@@ -288,7 +288,7 @@ class PreferenceManager(context: Context) {
         return getFloat("terrain_los_margin", 0f)
     }
 
-    /** No line of sight warning while the aircraft is closer than this to the home point, meters. */
+    /** The line of sight readout does not turn red closer than this to the home point, meters. */
     fun getTerrainLosWarnMinDistance(): Float {
         return getFloat("terrain_los_warn_min_distance", 200f)
     }
