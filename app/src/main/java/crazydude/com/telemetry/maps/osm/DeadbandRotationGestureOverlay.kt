@@ -10,7 +10,7 @@ class DeadbandRotationGestureOverlay(mapView: MapView) : RotationGestureOverlay(
 
     companion object {
         private const val ROTATION_THRESHOLD_DEG = 12f
-        private const val PINCH_THRESHOLD_RATIO = 0.06f // 6% scale change
+        private const val PINCH_THRESHOLD_RATIO = 0.12f // 12% scale change
     }
 
     private enum class GestureMode { UNDECIDED, ZOOM, ROTATE }
