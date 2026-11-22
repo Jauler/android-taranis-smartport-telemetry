@@ -104,6 +104,10 @@ class PrefsFragment : PreferenceFragmentCompat() {
             "terrain_repeater_height", 100f, 0f, 5000f,
             "Height of the repeater above the ground at the position of the pilot"
         )
+        bindNumberPreference(
+            "terrain_los_warn_min_distance", 200f, 0f, 100000f,
+            "No line of sight warning while the aircraft is closer than this to the home point"
+        )
         updateTerrainInfo()
 
         updateSummary()

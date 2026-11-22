@@ -190,6 +190,10 @@
                 android:defaultValue="0"
                 android:key="terrain_los_margin"/>
 
+        <Preference
+                android:title="Line of sight warning distance"
+                android:key="terrain_los_warn_min_distance"/>
+
     </PreferenceCategory>
 
     <PreferenceCategory android:title="USB Serial">

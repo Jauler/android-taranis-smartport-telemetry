@@ -37,6 +37,10 @@ are hidden.
   for radio links); Fresnel zone clearance is not, use *Clearance above obstacles* for margin.
 * Trees a few meters from the pilot would shade the whole horizon, so obstacles closer than
   *Ignore obstacles near the antenna* (50 m by default) are skipped.
+* There is no line of sight warning (red readout, map text) while the aircraft is closer
+  than *Line of sight warning distance* (200 m by default) to the home point (the takeoff point,
+  or the antenna if that is not known): on the ground and while climbing out the obstacles
+  around the pilot would trigger it all the time. The readout itself is still shown.
 
 ## Installing a pack
 

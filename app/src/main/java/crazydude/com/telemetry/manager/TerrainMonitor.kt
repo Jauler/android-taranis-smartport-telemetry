@@ -1,6 +1,7 @@
 package crazydude.com.telemetry.manager
 
 import android.content.Context
+import android.location.Location
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -182,7 +183,8 @@ class TerrainMonitor(
         val heightLimit: Float,
         val antennaHeight: Double,
         val ignoreNear: Double,
-        val margin: Double
+        val margin: Double,
+        val losWarnMinDistance: Float
     )
 
     private fun snapshot(): Input? {
@@ -197,7 +199,8 @@ class TerrainMonitor(
             preferenceManager.getTerrainHeightLimit(),
             preferenceManager.getTerrainAntennaHeight().toDouble(),
             preferenceManager.getTerrainLosIgnoreNear().toDouble(),
-            preferenceManager.getTerrainLosMargin().toDouble()
+            preferenceManager.getTerrainLosMargin().toDouble(),
+            preferenceManager.getTerrainLosWarnMinDistance()
         )
     }
 
@@ -252,12 +255,25 @@ class TerrainMonitor(
             }
         }
 
+        // No line of sight warning close to home: on the ground before takeoff and after landing,
+        // and while climbing out, trees and buildings around the pilot would trigger it all the time
+        val home = input.takeoff ?: input.antenna
+        val homeDistance = if (home != null) {
+            val result = FloatArray(1)
+            Location.distanceBetween(home.lat, home.lon, lat, lon, result)
+            result[0]
+        } else {
+            Float.NaN
+        }
+        val belowLos = !minLosAltitude.isNaN() && !input.altitude.isNaN() && input.altitude < minLosAltitude &&
+                !homeDistance.isNaN() && homeDistance >= input.losWarnMinDistance
+
         return State(
             heightAboveGround,
             altitudeLimit,
             minLosAltitude,
             !heightAboveGround.isNaN() && heightAboveGround > input.heightLimit,
-            !minLosAltitude.isNaN() && !input.altitude.isNaN() && input.altitude < minLosAltitude,
+            belowLos,
             obstacle,
             ground
         )
