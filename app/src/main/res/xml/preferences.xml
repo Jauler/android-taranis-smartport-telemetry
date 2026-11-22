@@ -144,7 +144,7 @@
 
         <Preference
                 android:title="Terrain data"
-                android:summary="Not installed"
+                android:summary="Not installed. Tap to install from a file"
                 android:key="terrain_info"/>
 
         <ListPreference

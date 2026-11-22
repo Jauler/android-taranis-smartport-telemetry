@@ -8,9 +8,9 @@ import java.io.FileInputStream
 /**
  * Finds and opens the terrain pack.
  *
- * A pack placed by the user into the application's external files directory
- * (Android/data/<package>/files/terrain/<anything>.tpk) takes precedence over the one bundled
- * into the APK as the asset terrain/terrain.tpk. Nothing is ever downloaded.
+ * A pack in the application's external files directory
+ * (Android/data/<package>/files/terrain/<anything>.tpk), put there by [TerrainInstaller] or by
+ * hand, takes precedence over the one bundled into the APK as the asset terrain/terrain.tpk.
  */
 object TerrainLoader {
 
@@ -27,11 +27,26 @@ object TerrainLoader {
         }
     }
 
-    fun open(context: Context): TerrainModel? {
-        val userPack = userDirectory(context)
+    /** The packs in the external files directory, complete ones only. */
+    fun userPacks(context: Context): List<File> {
+        return userDirectory(context)
             ?.listFiles()
             ?.filter { it.isFile && it.name.endsWith(EXTENSION, true) }
-            ?.maxBy { it.lastModified() }
+            ?: emptyList()
+    }
+
+    private fun userPack(context: Context): File? {
+        return userPacks(context).maxBy { it.lastModified() }
+    }
+
+    /** Changes whenever [open] would open something else than before. */
+    fun signature(context: Context): String {
+        val pack = userPack(context) ?: return "bundled"
+        return "${pack.absolutePath}:${pack.length()}:${pack.lastModified()}"
+    }
+
+    fun open(context: Context): TerrainModel? {
+        val userPack = userPack(context)
         if (userPack != null) {
             try {
                 return TerrainModel(TerrainPack(ChannelTerrainSource.open(userPack)))

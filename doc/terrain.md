@@ -43,11 +43,17 @@ readout turns red. The readouts are ordinary sensors and can be moved or hidden 
 
 ## Installing a pack
 
+* **In the application:** get the pack file onto the phone (download it, send it over,
+  copy it by USB to e.g. *Download*), then tap *Settings > Terrain > Terrain data* and pick
+  the file. It is copied into place and checked; the same entry replaces or removes the
+  installed pack. The application itself downloads nothing.
 * **Bundled:** put the file to `app/src/main/assets/terrain/terrain.tpk` before building. It is
   stored uncompressed in the APK and read in place. The file is not kept in git (the pack of
-  Lithuania is about 140 MB); a build without it works, just without the terrain features.
+  Lithuania is about 140 MB); a build without it works, just without the terrain features
+  until a pack is installed.
 * **By hand:** copy any `*.tpk` to `Android/data/<application id>/files/terrain/` on the phone.
-  It takes precedence over the bundled one.
+
+An installed pack takes precedence over the bundled one.
 
 ## Building the pack of Lithuania
 
