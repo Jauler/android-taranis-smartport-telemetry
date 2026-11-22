@@ -47,6 +47,11 @@ android {
         abortOnError false
     }
 
+    aaptOptions {
+        // The terrain pack is compressed internally and is read in place from the APK
+        noCompress 'tpk'
+    }
+
     sourceSets {
         main {
             proto {
