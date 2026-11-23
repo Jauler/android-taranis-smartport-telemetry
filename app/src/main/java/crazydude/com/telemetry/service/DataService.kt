@@ -19,6 +19,7 @@ import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.logger.OtxCsvLogger
 import crazydude.com.telemetry.manager.PreferenceManager
+import crazydude.com.telemetry.manager.TerrainMonitor
 import crazydude.com.telemetry.maps.Position
 import crazydude.com.telemetry.protocol.pollers.BluetoothDataPoller
 import crazydude.com.telemetry.protocol.pollers.BluetoothLeDataPoller
@@ -50,6 +51,15 @@ class DataService : Service(), DataDecoder.Listener {
     private var lastSpeed: Float = 0.0f
     private var lastHeading: Float = 0.0f
     private lateinit var preferenceManager: PreferenceManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Terrain readouts of the live flight, as long as the service lives (not just the map
+     * screen). Called on the main thread only. The map screen also feeds it the antenna
+     * position, and replayed flights (replay does not go through the service).
+     */
+    lateinit var terrainMonitor: TerrainMonitor
+        private set
     val points: ArrayList<Position> = ArrayList()
     private var notification: Notification? = null
     private var debugReceiver: BroadcastReceiver? = null
@@ -61,6 +71,7 @@ class DataService : Service(), DataDecoder.Listener {
         super.onCreate()
 
         preferenceManager = PreferenceManager(this)
+        terrainMonitor = TerrainMonitor(applicationContext, preferenceManager)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val importance = NotificationManager.IMPORTANCE_LOW
@@ -118,6 +129,7 @@ class DataService : Service(), DataDecoder.Listener {
                 debugDurationMs = intent.getIntExtra("duration", 120) * 1000L
                 dataPoller?.disconnect()
                 logListener = null
+                terrainMonitor.reset()
                 dataPoller = FileDataPoller(this, debugFile!!, 0L, debugDurationMs)
             }
             "drop" -> {
@@ -143,8 +155,13 @@ class DataService : Service(), DataDecoder.Listener {
         fun getService(): DataService = this@DataService
     }
 
+    /**
+     * @param newSession false when the link is found again after it was lost (automatic
+     * reconnection): the flight goes on, what is known about it (the takeoff point) is kept
+     */
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
-    fun connect(device: BluetoothDevice, isBle: Boolean) {
+    fun connect(device: BluetoothDevice, isBle: Boolean, newSession: Boolean = true) {
+        if (newSession) terrainMonitor.reset()
         try {
             dataPoller?.disconnect()
 
@@ -194,6 +211,7 @@ class DataService : Service(), DataDecoder.Listener {
     }
 
     fun connect(serialPort: UsbSerialPort, connection: UsbDeviceConnection) {
+        terrainMonitor.reset()
         val logFile = createLogFile()
         createLogger()
         dataPoller = UsbDataPoller(
@@ -237,6 +255,7 @@ class DataService : Service(), DataDecoder.Listener {
 
     override fun onDestroy() {
         super.onDestroy()
+        terrainMonitor.destroy()
         debugReceiver?.let { unregisterReceiver(it) }
         debugReceiver = null
         dataPoller?.disconnect()
@@ -267,6 +286,7 @@ class DataService : Service(), DataDecoder.Listener {
         }
         lastLatitude = latitude
         lastLongitude = longitude
+        mainHandler.post { terrainMonitor.onAircraftPosition(latitude, longitude) }
         dataListener?.onGPSData(latitude, longitude)
         logListener?.onGPSData(latitude, longitude)
     }
@@ -377,6 +397,7 @@ class DataService : Service(), DataDecoder.Listener {
 
     override fun onAltitudeData(altitude: Float) {
         lastAltitude = altitude
+        mainHandler.post { terrainMonitor.onAltitude(altitude) }
         dataListener?.onAltitudeData(altitude)
         logListener?.onAltitudeData(altitude)
     }
@@ -414,6 +435,7 @@ class DataService : Service(), DataDecoder.Listener {
         secondFlightMode: DataDecoder.Companion.FlyMode?
     ) {
         isArmed = armed
+        mainHandler.post { terrainMonitor.onArmedState(armed) }
         dataListener?.onFlyModeData(armed, heading, firstFlightMode, secondFlightMode)
         logListener?.onFlyModeData(armed, heading, firstFlightMode, secondFlightMode)
     }

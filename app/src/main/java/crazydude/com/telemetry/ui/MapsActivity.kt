@@ -50,7 +50,6 @@ import crazydude.com.telemetry.manager.Fr24Manager
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.manager.SensorTimeoutManager
 import crazydude.com.telemetry.manager.TerrainMonitor
-import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.maps.MapLabel
 import crazydude.com.telemetry.maps.MapLine
 import crazydude.com.telemetry.maps.MapMarker
@@ -161,8 +160,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var losBlockedShown: List<TerrainMonitor.Segment> = emptyList()
     // the last obstructed stretches reported by the terrain monitor, drawn or not
     private var losBlocked: List<TerrainMonitor.Segment> = emptyList()
-    private lateinit var terrainMonitor: TerrainMonitor
-    private var terrainSignature = ""
+    /** Lives in the data service, null until it is bound. */
+    private val terrainMonitor: TerrainMonitor?
+        get() = dataService?.terrainMonitor
+    // a replay started before the data service was bound starts a new flight session once it is
+    private var terrainResetPending = false
+    private var started = false
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             runOnUiThread {
@@ -283,6 +286,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                     polyLine?.submitPoints(it.points)
                 }
             }
+            attachTerrain()
         }
     }
 
@@ -293,8 +297,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         setContentView(R.layout.activity_maps)
 
         preferenceManager = PreferenceManager(this)
-        terrainSignature = TerrainLoader.signature(applicationContext)
-        terrainMonitor = TerrainMonitor(applicationContext, preferenceManager, this)
 
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -479,7 +481,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             if ( this.logPlayer == null) {
                 options = arrayOf(option0, option1)
             }
-            if (terrainMonitor.isAvailable) {
+            if (terrainMonitor?.isAvailable == true) {
                 options += option7
             }
 
@@ -510,7 +512,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                         showSetPlaybackDurationDialog()
                     }
                     option7 -> {
-                        if (terrainMonitor.setTakeoffHere()) {
+                        if (terrainMonitor?.setTakeoffHere() == true) {
                             Toast.makeText(this, "Altitudes are now relative to the terrain at this point", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(this, "Location is unknown", Toast.LENGTH_SHORT).show()
@@ -965,7 +967,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         secondFlightMode: DataDecoder.Companion.FlyMode?
     ) {
         runOnUiThread {
-            terrainMonitor.onArmedState(armed)
+            // a live flight is fed to the terrain monitor by the data service itself
+            if (isInReplayMode()) terrainMonitor?.onArmedState(armed)
             if (armed) {
                 mode.text = "Armed"
             } else {
@@ -1111,6 +1114,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onStart() {
         super.onStart()
+        started = true
+        attachTerrain()
         map?.onStart()
         if (preferenceManager.showArtificialHorizonView()) {
             horizonView.visibility = View.VISIBLE
@@ -1129,7 +1134,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         bottomList.removeAllViews()
         sensorsSettings.forEach {
             val sensorView = sensorViewMap[it.name]
-            val usable = terrainMonitor.isAvailable || it.name !in PreferenceManager.terrainSensors
+            val usable = terrainMonitor?.isAvailable == true || it.name !in PreferenceManager.terrainSensors
             sensorView?.visibility = if (it.shown && usable) View.VISIBLE else View.GONE
             if (it.position == "top") {
                 topList.addView(sensorView)
@@ -1278,6 +1283,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onStop() {
         super.onStop()
+        started = false
+        detachTerrain()
         map?.onStop()
         this.logPlayer?.stop();
         this.sensorTimeoutManager.pause();
@@ -1611,7 +1618,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.lastCellVoltage = 0.0f;
         throttle.text = "-"
         tlmRate.text = "0 b/s"
-        terrainMonitor.reset()
+        // only the readouts: the flight itself is kept by the data service across a lost link
+        onTerrainState(TerrainMonitor.EMPTY_STATE)
     }
 
     private fun bleCheck() =
@@ -1653,10 +1661,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         dataService?.let {
             connectButton.text = getString(R.string.reconnecting)
             connectButton.isEnabled = false
+            // the same flight goes on: the data service keeps what it knows about it
             if ( lastConnectionType == CONNTYPE_BLE) {
-                it.connect(lastBluetoothDevice as BluetoothDevice, true)
+                it.connect(lastBluetoothDevice as BluetoothDevice, true, newSession = false)
                 } else if (lastConnectionType == CONNTYPE_BT) {
-                it.connect(lastBluetoothDevice as BluetoothDevice, false)
+                it.connect(lastBluetoothDevice as BluetoothDevice, false, newSession = false)
             }
         }
     }
@@ -1684,7 +1693,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         polyLine = null;
         flightPlanLines.clear()
         flightPlanLabels.clear()
-        terrainMonitor.destroy()
+        detachTerrain()
         map?.onDestroy()
         if (!isChangingConfigurations) {
             dataService?.setDataListener(null)
@@ -1799,7 +1808,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.sensorTimeoutManager.onAltitudeData(altitude);
         runOnUiThread {
             this.altitude.text = this.formatHeight(altitude);
-            terrainMonitor.onAltitude(altitude)
+            if (isInReplayMode()) terrainMonitor?.onAltitude(altitude)
         }
     }
 
@@ -2306,7 +2315,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         marker = null
         headingPolyline?.remove()
         headingPolyline = null
-        terrainMonitor.reset()
+        // a replay is a flight session of its own
+        val monitor = terrainMonitor
+        if (monitor != null) monitor.reset() else terrainResetPending = true
     }
 
     private fun switchToIdleState() {
@@ -2455,7 +2466,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             this.hasGPSFix = false;
             this.lastTraveledDistance = 0.0
             this.polyLine?.clear()
-            terrainMonitor.reset()
+            // replay: the flight is played again from its start. A live decoder restarts when a
+            // connection is made, the data service decides whether that is a new flight
+            if (isInReplayMode()) terrainMonitor?.reset()
         }
     }
 
@@ -2486,7 +2499,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                     replayHomeGPS = list[0]
                 }
                 //the first point of a rebuilt track is where the flight has started
-                terrainMonitor.onAircraftPosition(list[0].lat, list[0].lon)
+                if (isInReplayMode()) terrainMonitor?.onAircraftPosition(list[0].lat, list[0].lon)
                 //add all points except last one
                 //last one will be fired in onGPSData()
                 if ( list.size>=2) {
@@ -2538,8 +2551,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 }
                 this.tryCreateMarker()
                 fr24Manager?.updateDronePosition(latitude, longitude)
-                terrainMonitor.onAntennaPosition(antennaPosition())
-                terrainMonitor.onAircraftPosition(latitude, longitude)
+                terrainMonitor?.onAntennaPosition(antennaPosition())
+                if (isInReplayMode()) terrainMonitor?.onAircraftPosition(latitude, longitude)
             }
         }
     }
@@ -2553,7 +2566,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             this.traveled_distance.text = "-"
             this.lastGPS = Position(0.0, 0.0);
             this.hasGPSFix = false;
-            terrainMonitor.reset()
 
             if (preferenceManager.getConnectionVoiceMessagesEnabled()) {
                 soundPool!!.play(connectedSoundId, 1f, 1f, 0, 0, 1f)
@@ -3055,21 +3067,39 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     /** Terrain data may have been installed or removed in the settings. */
     private fun reloadTerrainIfChanged() {
-        val signature = TerrainLoader.signature(applicationContext)
-        if (signature == terrainSignature) return
-        terrainSignature = signature
-        terrainMonitor.destroy()
-        terrainMonitor = TerrainMonitor(applicationContext, preferenceManager, this)
-        // the new monitor reports nothing until it has something to say, and nothing at all
-        // without terrain data: the marks of the old one must not stay
-        losBlocked = emptyList()
-        showLosBlocked()
-        updateSensorsPlacement()
+        // the monitor sends an empty state when it reloads: no readouts or marks of the old data stay
+        if (terrainMonitor?.reloadIfChanged() == true) {
+            updateSensorsPlacement()
+        }
     }
 
     private fun updateTerrainAntenna() {
-        terrainMonitor.onAntennaPosition(antennaPosition())
-        terrainMonitor.requestUpdate()
+        terrainMonitor?.onAntennaPosition(antennaPosition())
+        terrainMonitor?.requestUpdate()
+    }
+
+    /**
+     * Shows the terrain readouts of the data service while this screen is visible (and the
+     * service is bound). Without a screen the monitor still follows the flight, but does not
+     * compute what nobody sees.
+     */
+    private fun attachTerrain() {
+        val monitor = terrainMonitor ?: return
+        if (terrainResetPending) {
+            terrainResetPending = false
+            monitor.reset()
+        }
+        reloadTerrainIfChanged()
+        updateSensorsPlacement()
+        if (started) {
+            updateTerrainAntenna()
+            monitor.listener = this
+        }
+    }
+
+    private fun detachTerrain() {
+        val monitor = terrainMonitor ?: return
+        if (monitor.listener === this) monitor.listener = null
     }
 
     private fun formatTerrainHeight(v: Float): String {
@@ -3081,6 +3111,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     override fun onTerrainState(state: TerrainMonitor.State) {
+        // Idle (link lost, or not connected): the data service still knows the last state of
+        // the flight, but like every other readout it is not shown without a connection
+        if (state !== TerrainMonitor.EMPTY_STATE && !isInReplayMode() && dataService?.isConnected() != true) {
+            onTerrainState(TerrainMonitor.EMPTY_STATE)
+            return
+        }
         heightAboveGround.text = formatTerrainHeight(state.heightAboveGround)
         heightAboveGround.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)
