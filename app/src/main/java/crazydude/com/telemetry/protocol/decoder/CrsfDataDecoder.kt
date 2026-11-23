@@ -14,6 +14,10 @@ class CrsfDataDecoder(listener: Listener) : DataDecoder(listener) {
     private var longitude: Double = 0.0
     private var rcChannels = IntArray(16) {1500};
 
+    //set once the flight controller is seen to send the altitude of its barometer: that one is
+    //shown as the altitude then, and the altitude of the GPS frame as the altitude above MSL
+    private var hasBaroAltitude = false
+
     private fun sq(v : Int) : Int {
         return v*v;
     }
@@ -43,7 +47,15 @@ class CrsfDataDecoder(listener: Listener) : DataDecoder(listener) {
             }
             Protocol.GPS_ALTITUDE -> {
                 val gps_altitude = data.data - 1000.0f
-                listener.onAltitudeData(gps_altitude)
+                if (hasBaroAltitude) {
+                    listener.onGPSAltitudeData(gps_altitude)
+                } else {
+                    listener.onAltitudeData(gps_altitude)
+                }
+            }
+            Protocol.BARO_ALTITUDE -> {
+                hasBaroAltitude = true
+                listener.onAltitudeData(data.data / 10f)
             }
             Protocol.GPS_LONGITUDE -> {
                 longitude = data.data / 10000000.toDouble()
@@ -62,8 +74,11 @@ class CrsfDataDecoder(listener: Listener) : DataDecoder(listener) {
 //                listener.onHeadingData(heading)
             }
             Protocol.ALTITUDE -> {
-                val altitude = data.data - 1000f
-                listener.onAltitudeData(altitude)
+                //the altitude of the GPS frame once more
+                if (!hasBaroAltitude) {
+                    val altitude = data.data - 1000f
+                    listener.onAltitudeData(altitude)
+                }
             }
             Protocol.GSPEED -> {
                 val speed = data.data / 10f
