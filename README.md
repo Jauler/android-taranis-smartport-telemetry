@@ -1,140 +1,110 @@
-# Android Taranis SmartPort Telemetry / Roman Lut
+# Android Taranis SmartPort Telemetry
 
-This is fork of CrazyDude's excellent application https://github.com/CrazyDude1994/android-taranis-smartport-telemetry
+An Android app for following a Betaflight quad's telemetry live on a phone or tablet. It shows
+the quad's position on a satellite or topographic map, along with its altitude, speed, distance
+from home, battery and link quality. Every flight is recorded so it can be replayed later or
+exported to GPX/KML. With an offline terrain pack it also knows the ground under the quad: it
+shows the height above ground, and how high the quad has to stay to keep a clear radio line of
+sight back to the pilot. The app is used and tested with CRSF (ExpressLRS). The FrSky
+SmartPort, LTM and MAVLink decoders are still in the code but are not tested and may not work.
 
-![](doc/screenshot.jpg)
+![General view](doc/images/screenshot_general.jpg)
 
-Latest build is available in Releases: https://github.com/RomanLut/android-taranis-smartport-telemetry/releases
+## Hardware setup
 
-This version adds and changes the following compared to upstream:
+The phone gets the telemetry over a USB-OTG cable, in one of two ways.
 
-- sensors: Airspeed, Vertical speed, Altitude MSL, Throttle, Cell Voltage, Telemetry Rate, Distance to home, Travelled distance
-- CRSF link quality sensors
-- RC Channels display (8ch for Mavlink v1, 18ch for Mavlink v2, 16 channels for CRSF<sup>1</sup>)
-- better support for CRSF and LTM telemetry
-- connection status voice messages
-- USB VCP cable connection to radios
-- topological map (OpenTopoMap)
-- satellite map and satellite + streets hybrid map (ESRI, free, no API key required, cacheable offline)
-- flight plan overlay: import a CSV file (lat,lon per line) to draw a planned flight path on the map; multiple plans supported
-- GPX export
-- KML export
-- context menu for deleting and renaming logs
-- UI interface enhancements
-- automatic reconnection (Bluetooth/BLE)
-- improved stability and bug fixes
-- removed Google Maps dependency (replaced with OSMDroid + ESRI tiles)
-- removed UAV radar / telemetry sharing server functionality
-- removed UVC external video receiver support
+### Through the radio (USB-VCP)
 
-<sup>1</sup> *Channels are displayed with CRSF protocol if they are sent with telemetry. It works with this PR which allows to connect directly to Express LRS TX module:* https://github.com/ExpressLRS/ExpressLRS/pull/2731
+The quad's telemetry already reaches the radio over its ELRS link. EdgeTX/OpenTX radios can
+pass it on through their USB port:
 
-## Map types
+1. On the radio, set **SYS > Hardware > USB-VCP** to **Telemetry** (shown as *Telemetry
+   Mirror* on some firmware versions).
+2. Connect the radio's USB port to the phone with a USB-OTG adapter and cable. A plain
+   USB-C to USB-C cable may not work; an OTG adapter plus a cable does.
+3. In the app, tap **Connect** and choose the USB device.
 
-| Map | Source | Offline cache |
-|-----|--------|---------------|
-| OpenStreetMap | OSM | Yes |
-| OpenTopoMap | OSM | Yes |
-| Satellite | ESRI ArcGIS World Imagery | Yes |
-| Satellite + Streets | ESRI ArcGIS World Imagery + Transportation + Places overlays | Yes |
+```mermaid
+flowchart LR
+    Q["Quad<br/>(Betaflight + ELRS RX)"] -. "ELRS radio link" .-> R["Radio<br/>(ELRS TX)<br/>USB-VCP = Telemetry"]
+    R -- "USB-OTG cable" --> P["Android phone / tablet"]
+```
 
-No API keys required for any map type.
+### Through a ground ELRS receiver (USB-UART dongle)
 
-## Flight plan overlay
+Without a radio that can mirror telemetry, an ELRS receiver bound to the quad can be used on the
+ground, connected to the phone through a USB-UART dongle (CP2102, CH340, FTDI...):
 
-Import a CSV file with one `latitude,longitude` coordinate per line. Consecutive points form a path. Multiple CSV files can be imported to display multiple plans simultaneously. Plans are persisted across sessions and can be toggled or deleted from Settings.
+1. Bind an ELRS receiver to the quad.
+2. Wire it to the dongle: receiver **TX** to dongle **RX**, receiver **RX** to dongle **TX**,
+   **5V** and **GND**.
+3. Plug the dongle into the phone with a USB-OTG cable.
+4. In the app, set **Settings > USB Serial > Baudrate** to the receiver's serial speed (420000 for
+   CRSF by default), then tap **Connect** and choose the USB device.
 
-# Routing telemetry to the application
+```mermaid
+flowchart LR
+    Q["Quad<br/>(Betaflight + ELRS)"] -. "ELRS radio link" .-> E["ELRS receiver<br/>(bound to the quad)"]
+    E -- "UART<br/>TX / RX / 5V / GND" --> U["USB-UART dongle"]
+    U -- "USB-OTG cable" --> P["Android phone / tablet"]
+```
 
-Multiple possibilities exits.
+Bluetooth and BLE modules (HC-05, HC-06, HM-10, radios with built-in Bluetooth) are also
+supported; see the [original README](https://github.com/CrazyDude1994/android-taranis-smartport-telemetry)
+for wiring them.
 
-- route telemetry to the bluetooth module in the radios which have bluetooth installed
-- install bluetooth module in the radio yourself
-- use Crossfire TX with bluetooth module
-- sniff telemetry from S.PORT pin and route to HC-06 / HM-10 module ( see instructions below )
-- since version 1.2: route telemetry to USB-C port of the radio ( System->USB-VCP->Telemetry Mirror ) and connect to the phone using OTG cable. Note that USB-C<->USB-C cable may not work; I had to use OTG adapter + cable.
-- install ELRS build with BLE telemetry output: https://github.com/ExpressLRS/ExpressLRS/pull/2305
-- install ELRS build with Bluetooth telemetry output: https://github.com/ExpressLRS/ExpressLRS/pull/2101
+## Features
 
+- **Live map:** OpenStreetMap, OpenTopoMap, ESRI satellite and satellite + streets, all without
+  API keys and cached for offline use. It shows the track, heading line and home line.
+- **Readouts:** satellites, battery (mAh, voltage, cell voltage, current), speed, vertical
+  speed, altitude, altitude above sea level, distance to home, travelled distance, throttle, artificial
+  horizon, flight mode and armed state, CRSF link quality (RSSI, LQ, SNR, RF mode, TX power,
+  active antenna), RC channels and telemetry rate. Each readout can be moved between the top and
+  bottom bars or hidden.
+- **Recording and replay:** every flight is logged (raw `.tlm` and CSV) and can be replayed with
+  a seek bar, renamed, deleted or exported to GPX and KML.
+- **Flight plans:** import CSV files (`lat,lon` per line) to draw planned routes on the map,
+  with the name of each plan shown next to it. Several plans can be shown at once and toggled
+  in the settings.
 
-Below is original Readme.md:
+  ![Flight plans on the map](doc/images/screenshot_flightplan.jpg)
 
+- **Nearby aircraft (FlightRadar24):** the app fetches real aircraft around the phone from
+  FlightRadar24 (an internet connection is needed) and draws them on the map. When an aircraft comes close
+  to the drone (within 5 km and below 1500 m by default), a voice warning gives its direction,
+  distance and altitude: "Traffic, north-east, 3.2 kilometers, altitude 900 meters". The search radius, ceilings, warning distance and refresh rate are
+  set in **Settings > FlightRadar24 Nearby Aircraft**; it is off by default.
 
-# Android Taranis SmartPort Telemetry Viewer
+  ![Aircraft from FlightRadar24 on the map](doc/images/screenshot_fr24.jpg)
 
-[![Donate](https://img.shields.io/badge/Donate-Patreon-green.svg)](https://www.patreon.com/android_rc_telemetry)
+- **Voice messages** for connection changes, and **automatic reconnection** over Bluetooth.
 
+### Terrain: height above ground and line of sight
 
-This android application let you view and record your taranis telemetry data in realtime.
+Given a terrain pack (an offline elevation model with tree and building heights, see
+[doc/terrain.md](doc/terrain.md)), the app adds terrain readouts:
 
-![alt text](https://raw.githubusercontent.com/CrazyDude1994/android-taranis-smartport-telemetry/master/screen.jpg "Screenshot")
+- **Height above ground:** the quad's height above the ground right below it, not above the
+  takeoff point. It turns red above the height limit (120 m by default).
+- **Altitude limit:** the altitude reading at which the quad reaches that limit over the current
+  ground.
+- **Ground elevation**, and **elevation with trees and buildings**, below the quad.
+- **Minimum line-of-sight altitude:** the lowest altitude at which the radio link to the
+  pilot's antenna keeps 60% of the first Fresnel zone clear of terrain, trees and buildings
+  (5.8 GHz, 2.4 GHz or 900 MHz, selectable). Earth curvature is included. Below it, the readout
+  turns red and the obstructed stretches of the home line are drawn in red on the map:
 
-# Hardware and connection
-In order this to work you need additional hardware: inverter and bluetooth module (HC-05 or HC-06 or something else, also you don't need module and inverter if your transmitter has internal one)
-One important thing: Module should be configured to work on 57600 baud rate, otherwise it won't work. 
-Connect inverter to your Smart Port and then connect bluetooth module to the inverter. You now can connect your phone to your bluetooth module and view data
+![Line of sight obstructed by terrain](doc/images/screenshot_fresnel.jpg)
 
-![alt text](https://raw.githubusercontent.com/CrazyDude1994/android-taranis-smartport-telemetry/master/connection.jpg "Connection example")
+Here the quad is 10 km out at 124 m, but the link needs 207 m: two stretches near the pilot
+(the red marks on the home line) cut into the Fresnel zone.
 
-**upd: ** now you can use usb serial connection. More info here https://github.com/CrazyDude1994/android-taranis-smartport-telemetry/issues/47
+## Credits
 
-## Tested modules
-
-Currently we support classic BL,BLE and integrated bluetooth modules into your transmitter. We currently tested them on the HC-05, HC-06, HC-09, HM-10. Make sure that when using BLE module you should disable PIN code (if possible). For classic BL module to appear in the list, you should pair it to your Android device first.
-
-## HC-06 With MOSFET inverter
-
-![Inverter diagram](inverter.png)
-
-![HC-06 With inverter](hc06_inverter.JPG)
-
-## HC-06 Configuration
-
-By default, HC-06 is configured for 9600bps. To configure, use any USB-to-serial converter and serial client. Mac and Linux can use Terminal `screen` command. Windows users can use [Putty](http://www.putty.org/)
-
-HC-06 module will expect that each command will be entered very fast (AFAIR max 1s between letters). So the best option here is to open text editor, type commands there and then copy them one by one into serial software.
-
-1. `AT+NAMEyournamehere` - no spaces!
-1. `AT+PIN1234` - PIN, no spaces again
-1. `AT+ENABLEIND0` (you can ommit this command if your module does not support it)
-1. `AT+BAUD7` - set port speed to 57600
-
-
-# Google Play
-https://play.google.com/store/apps/details?id=crazydude.com.telemetry
-
-# Beta program
-I'm happy to announce that now you can apply for an open beta program, to test and use the most newest features as soon as possible.
-
-You can apply for a beta here https://play.google.com/apps/testing/crazydude.com.telemetry
-
-Please leave your feedback at [#47](https://github.com/CrazyDude1994/android-taranis-smartport-telemetry/issues/47)
-
-# RCGroups Thread
-https://www.rcgroups.com/forums/showthread.php?3284789-iNav-SmartPort-telemetry-viewer-and-logger
-
-# Your module doesn't work?
-Make sure you followed all the steps. If this doesn't help, you can ask for help by creating new issue with your module model. Also for quick support you can join our telegram group and ask for help there
-
-# Telegram group
-https://t.me/joinchat/Gf03BFXI2e48WMvzjLeIjw
-
-# Say thanks
-If you want to help or say thanks follow my yt channel:
-https://www.youtube.com/channel/UCjAhODF0Achhc1fynxEXQLg?view_as=subscriber
-
-or you can donate to my patreon: https://www.patreon.com/android_rc_telemetry
-
-
-# Special thanks
-hyperion11 - Ardupilot support
-
-Alexey Stankevich - initial testing, feedback
-
-Marios Chrysomallis - testing BLE support
-
-Paweł Spychalski - project contribute, made a great video about the app (https://www.youtube.com/watch?v=0-AyP5Y7pCI)
-
-AeroSIM RC - for sending their simulator for testing app from home (they have plugin to connect my app with their sim)
-
-usb-serial-for-android - library creators (https://github.com/mik3y/usb-serial-for-android)
+This is a fork of [RomanLut's version](https://github.com/RomanLut/android-taranis-smartport-telemetry)
+of CrazyDude1994's [Android Taranis SmartPort Telemetry Viewer](https://github.com/CrazyDude1994/android-taranis-smartport-telemetry).
+Thanks to everyone who contributed to them, and to the
+[usb-serial-for-android](https://github.com/mik3y/usb-serial-for-android) and
+[osmdroid](https://github.com/osmdroid/osmdroid) projects.
