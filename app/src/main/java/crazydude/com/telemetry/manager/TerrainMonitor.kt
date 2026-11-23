@@ -90,11 +90,7 @@ class TerrainMonitor(
     private var lastUpdateTime = 0L
     private var generation = 0
 
-    private var aircraft: Position? = null
-    private var altitude = Float.NaN
-    private var takeoff: Position? = null
-    private var takeoffLocked = false
-    private var disarmed = false
+    private val tracker = TakeoffTracker()
     private var antenna: Position? = null
 
     val isAvailable: Boolean
@@ -105,7 +101,7 @@ class TerrainMonitor(
         get() = model?.description
 
     val takeoffPosition: Position?
-        get() = takeoff
+        get() = tracker.takeoff
 
     init {
         if (model != null) {
@@ -118,24 +114,17 @@ class TerrainMonitor(
 
     fun onAircraftPosition(lat: Double, lon: Double) {
         if (lat == 0.0 && lon == 0.0) return
-        val position = Position(lat, lon)
-        aircraft = position
-        if (!takeoffLocked && (takeoff == null || disarmed)) {
-            takeoff = position
-        }
+        tracker.onAircraftPosition(Position(lat, lon), false)
         requestUpdate()
     }
 
     fun onAltitude(altitude: Float) {
-        this.altitude = altitude
+        tracker.onAltitude(altitude)
         requestUpdate()
     }
 
     fun onArmedState(armed: Boolean) {
-        disarmed = !armed
-        if (disarmed && !takeoffLocked) {
-            aircraft?.let { takeoff = it }
-        }
+        tracker.onArmedState(armed)
     }
 
     /** Position of the receiving antenna (the phone); null if not known. */
@@ -145,9 +134,7 @@ class TerrainMonitor(
 
     /** Declares the current aircraft position to be the takeoff point until the next [reset]. */
     fun setTakeoffHere(): Boolean {
-        val position = aircraft ?: return false
-        takeoff = position
-        takeoffLocked = true
+        if (!tracker.setTakeoffHere()) return false
         requestUpdate()
         return true
     }
@@ -155,11 +142,7 @@ class TerrainMonitor(
     /** Forgets everything known about the flight (new connection, replay restart). */
     fun reset() {
         if (BuildConfig.DEBUG) Log.d(STATE_TAG, "reset")
-        aircraft = null
-        altitude = Float.NaN
-        takeoff = null
-        takeoffLocked = false
-        disarmed = false
+        tracker.reset()
         generation++
         if (model != null) {
             listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, emptyList(), Float.NaN, Float.NaN))
@@ -215,12 +198,12 @@ class TerrainMonitor(
     )
 
     private fun snapshot(): Input? {
-        val position = aircraft ?: return null
+        val position = tracker.aircraft ?: return null
         return Input(
             generation,
             position,
-            altitude,
-            takeoff,
+            tracker.altitude,
+            tracker.takeoff,
             antenna,
             preferenceManager.getTerrainAltitudeReference(),
             preferenceManager.getTerrainHeightLimit(),
