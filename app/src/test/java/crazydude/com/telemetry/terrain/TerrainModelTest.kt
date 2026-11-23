@@ -118,6 +118,24 @@ class TerrainModelTest {
         assertTrue("min altitude ${los.minAltitude}", los.minAltitude in 185.5..186.5)
         assertTrue(los.complete)
 
+        // At 150 m the aircraft is behind the wall: the line is obstructed there, a third of
+        // the way from the antenna, and nowhere else
+        val low = model.minLineOfSightAltitude(
+            c[1].toDouble(), c[2].toDouble(), 2.0, c[3].toDouble(), c[4].toDouble(), 0.0, 0.0, 0.0, 150.0
+        )!!
+        assertEquals(1, low.blocked.size)
+        val along = { lon: Double -> (lon - c[2].toDouble()) / (c[4].toDouble() - c[2].toDouble()) }
+        val from = along(low.blocked[0].fromLon)
+        val to = along(low.blocked[0].toLon)
+        assertTrue("obstructed from $from to $to", from in 0.31..0.335 && to in 0.335..0.36)
+        // the mark is widened to 2 % of the line
+        assertEquals(0.02, to - from, 0.004)
+        // above the line of sight altitude, and without an altitude, nothing is obstructed
+        assertTrue(model.minLineOfSightAltitude(
+            c[1].toDouble(), c[2].toDouble(), 2.0, c[3].toDouble(), c[4].toDouble(), 0.0, 0.0, 0.0, 190.0
+        )!!.blocked.isEmpty())
+        assertTrue(los.blocked.isEmpty())
+
         // A 5.8 GHz link needs 60 % of the first Fresnel zone clear above the wall:
         // 0.6 * sqrt(0.0517 * 1000 * 2000 / 3000) = 3.5 m there, three times that at the aircraft
         val radio = model.minLineOfSightAltitude(

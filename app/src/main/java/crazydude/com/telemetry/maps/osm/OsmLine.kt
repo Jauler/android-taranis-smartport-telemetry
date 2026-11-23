@@ -13,6 +13,12 @@ class OsmLine(private val mapView: MapView) : MapLine() {
         mapView.overlayManager.add(line)
     }
 
+    /** Makes the line heavier than the ordinary ones, with round ends. */
+    fun emphasize() {
+        line.outlinePaint.strokeWidth = line.outlinePaint.strokeWidth * 1.8f
+        line.outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+    }
+
     override fun remove() {
         mapView.overlayManager.remove(line)
         mapView.invalidate()

@@ -16,6 +16,8 @@ interface MapWrapper {
     fun addPolyline(width: Float, color: Int, vararg points: Position): MapLine
     fun setOnCameraMoveStartedListener(function: () -> Unit)
     fun addPolyline(color: Int): MapLine
+    /** A short, heavier line which marks a stretch of another line. */
+    fun addMarkLine(color: Int, from: Position, to: Position): MapLine
     fun addLabel(text: String, position: Position): MapLabel
 
     fun getMapOrientation(): Float

@@ -129,6 +129,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
         private const val COLOR_SENSOR_NORMAL = Color.WHITE
         private const val COLOR_SENSOR_ALERT = 0xFFFF5252.toInt()
+        private const val COLOR_LOS_BLOCKED = 0xFFFF0000.toInt()
     }
 
     enum class RequestWritePermissionSequenceType {
@@ -153,6 +154,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
     private var flightPlanLabels: MutableList<MapLabel> = mutableListOf()
     private var homeLine: MapLine? = null
+    // red marks on the home line where the line of sight to the aircraft is obstructed
+    private val losBlockedLines = ArrayList<MapLine>()
+    private var losBlockedShown: List<TerrainMonitor.Segment> = emptyList()
     private lateinit var terrainMonitor: TerrainMonitor
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
@@ -569,6 +573,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         flightPlanLabels.clear()
         homeLine?.remove()
         homeLine = null
+        losBlockedLines.forEach { it.remove() }
+        losBlockedLines.clear()
+        losBlockedShown = emptyList()
         marker?.remove();
         marker = null;
         airplaneMarkers.values.forEach { it.remove() }
@@ -604,6 +611,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         homeLine = map?.addPolyline(2f, preferenceManager.getHomeLineColor())
         drawFlightPlans()
         showMyLocation()
+        // the marks on the home line went with the old map
+        terrainMonitor.requestUpdate()
     }
 
     private fun updateCompassHeading(orientation: Float) {
@@ -3040,6 +3049,23 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         surfaceElevation.text = formatTerrainHeight(state.surfaceElevation)
         minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
         minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
+        showLosBlocked(state.losBlocked)
+    }
+
+    /**
+     * Marks in red the stretches of the home line (the straight line from the pilot to the
+     * aircraft) where the line of sight is obstructed. Nothing is drawn without the home line.
+     */
+    private fun showLosBlocked(segments: List<TerrainMonitor.Segment>) {
+        val wanted = if (preferenceManager.isHomeLineEnabled()) segments else emptyList()
+        if (wanted == losBlockedShown) return
+        losBlockedShown = wanted
+        losBlockedLines.forEach { it.remove() }
+        losBlockedLines.clear()
+        wanted.forEach { segment ->
+            map?.addMarkLine(COLOR_LOS_BLOCKED, segment.from, segment.to)?.let { losBlockedLines.add(it) }
+        }
+        map?.invalidate()
     }
 
 }

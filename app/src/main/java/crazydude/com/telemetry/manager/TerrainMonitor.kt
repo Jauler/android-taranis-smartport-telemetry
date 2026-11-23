@@ -50,11 +50,16 @@ class TerrainMonitor(
         val belowLos: Boolean,
         /** Where the obstacle defining [minLosAltitude] is, null if unknown. */
         val losObstacle: Position?,
+        /** Pieces of the line from the antenna to the aircraft which are obstructed now; empty unless [belowLos]. */
+        val losBlocked: List<Segment>,
         /** Elevation above sea level of the ground below the aircraft, NaN if unknown. */
         val groundElevation: Float,
         /** Elevation above sea level of the top of the trees or buildings below the aircraft, NaN if unknown. */
         val surfaceElevation: Float
     )
+
+    /** A piece of a line on the map. */
+    data class Segment(val from: Position, val to: Position)
 
     companion object {
         private const val TAG = "Terrain"
@@ -148,7 +153,7 @@ class TerrainMonitor(
         disarmed = false
         generation++
         if (model != null) {
-            listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, Float.NaN, Float.NaN))
+            listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, emptyList(), Float.NaN, Float.NaN))
         }
     }
 
@@ -241,6 +246,8 @@ class TerrainMonitor(
 
         var minLosAltitude = Float.NaN
         var obstacle: Position? = null
+        var blocked: List<Segment> = emptyList()
+        val altitudeAboveSeaLevel = (input.altitude + reference).toDouble()  // NaN if either is unknown
         if (terrain.hasObjects) {
             // The antenna is where the phone is. Without a usable phone position (no fix, or a
             // position outside of the terrain data) it is assumed to be at the takeoff point.
@@ -249,13 +256,16 @@ class TerrainMonitor(
                 if (antenna == null || los != null) continue
                 los = terrain.minLineOfSightAltitude(
                     antenna.lat, antenna.lon, input.antennaHeight,
-                    lat, lon, input.ignoreNear, input.margin, input.wavelength
+                    lat, lon, input.ignoreNear, input.margin, input.wavelength, altitudeAboveSeaLevel
                 )
             }
             if (los != null) {
                 minLosAltitude = (los.minAltitude - reference).toFloat()
                 if (los.obstacleDistance < los.distance - 1.0) {
                     obstacle = Position(los.obstacleLat, los.obstacleLon)
+                }
+                blocked = los.blocked.map {
+                    Segment(Position(it.fromLat, it.fromLon), Position(it.toLat, it.toLon))
                 }
             }
         }
@@ -280,6 +290,7 @@ class TerrainMonitor(
             !heightAboveGround.isNaN() && heightAboveGround > input.heightLimit,
             belowLos,
             obstacle,
+            if (belowLos) blocked else emptyList(),
             ground,
             if (terrain.hasObjects) terrain.surfaceAt(lat, lon) else Float.NaN
         )

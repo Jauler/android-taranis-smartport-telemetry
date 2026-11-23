@@ -155,6 +155,14 @@ class OsmMapWrapper(private val context: Context, private val mapView: MapView, 
         return res;
     }
 
+    override fun addMarkLine(color: Int, from: Position, to: Position): MapLine {
+        val res = OsmLine(mapView)
+        res.color = color
+        res.emphasize()
+        res.addPoints(listOf(from, to))
+        return res
+    }
+
     override fun onCreate(bundle: Bundle?) {
     }
 
