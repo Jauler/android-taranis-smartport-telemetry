@@ -12,7 +12,8 @@ import crazydude.com.telemetry.terrain.TerrainModel
 
 /**
  * Keeps the terrain related readouts up to date while the aircraft moves:
- *  - elevation above sea level of the ground right below the aircraft,
+ *  - elevation above sea level of the ground right below the aircraft, and of the top of the
+ *    trees or buildings standing there,
  *  - height above the ground right below the aircraft,
  *  - the altitude at which the aircraft reaches the legal height above ground limit,
  *  - the lowest altitude with a free line of sight to the receiving antenna.
@@ -50,7 +51,9 @@ class TerrainMonitor(
         /** Where the obstacle defining [minLosAltitude] is, null if unknown. */
         val losObstacle: Position?,
         /** Elevation above sea level of the ground below the aircraft, NaN if unknown. */
-        val groundElevation: Float
+        val groundElevation: Float,
+        /** Elevation above sea level of the top of the trees or buildings below the aircraft, NaN if unknown. */
+        val surfaceElevation: Float
     )
 
     companion object {
@@ -145,7 +148,7 @@ class TerrainMonitor(
         disarmed = false
         generation++
         if (model != null) {
-            listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, Float.NaN))
+            listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, Float.NaN, Float.NaN))
         }
     }
 
@@ -275,7 +278,8 @@ class TerrainMonitor(
             !heightAboveGround.isNaN() && heightAboveGround > input.heightLimit,
             belowLos,
             obstacle,
-            ground
+            ground,
+            if (terrain.hasObjects) terrain.surfaceAt(lat, lon) else Float.NaN
         )
     }
 }

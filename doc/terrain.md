@@ -10,6 +10,7 @@ With a terrain pack present the application shows:
 |---|---|
 | Height above ground | Altitude of the aircraft above the ground right below it (AGL). |
 | Ground elevation | Elevation above sea level of the ground right below the aircraft. |
+| Elevation with trees and buildings | Elevation above sea level of the top of the highest tree or building right below the aircraft: the ground elevation plus the height of what stands on it. |
 | Altitude limit | The altitude, as shown by the altitude sensor, at which the aircraft reaches the height above ground limit (120 m by default). If the ground below the aircraft is 30 m higher than the takeoff point, the limit reads 150 m. |
 | Min line of sight altitude | The lowest altitude, as shown by the altitude sensor, at which nothing (ground, trees, buildings) stands between the aircraft and the receiving antenna. |
 
