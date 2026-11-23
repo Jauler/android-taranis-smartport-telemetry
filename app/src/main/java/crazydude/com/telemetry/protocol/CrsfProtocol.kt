@@ -24,7 +24,6 @@ class CrsfProtocol : Protocol {
 
         private const val GPS_TYPE = 0x02
         private const val VARIO_TYPE = 0x07
-        private const val BARO_ALTITUDE_TYPE = 0x09
         private const val BATTERY_TYPE = 0x08
         private const val LINK_STATS = 0x14
         private const val ATTITUDE_TYPE = 0x1E
@@ -42,7 +41,6 @@ class CrsfProtocol : Protocol {
         private const val ATTITUDE_PACKET_LEN = 7
         private const val BATTERY_PACKET_LEN = 9
         private const val VARIO_PACKET_LEN = 3
-        private const val MIN_BARO_ALTITUDE_PACKET_LEN = 3
         private const val LINK_STATS_PACKET_LEN = 11
         private const val RC_CHANNELS_PACKED_PACKET_LEN = 23;
     }
@@ -159,18 +157,6 @@ class CrsfProtocol : Protocol {
                         val vspeed = data.short
 
                         dataDecoder.decodeData( Protocol.Companion.TelemetryData( VSPEED, vspeed.toInt()))
-                    }
-                }
-                BARO_ALTITUDE_TYPE.toByte() -> {
-                    //altitude (and vertical speed, not used here) from the barometer: the height
-                    //above the point the flight controller counts from, while the altitude of
-                    //the GPS frame may be above sea level
-                    if (inputData.size >= MIN_BARO_ALTITUDE_PACKET_LEN) {
-                        val packed = data.short.toInt() and 0xFFFF
-                        //high bit set: meters; otherwise decimeters with a 1000 m offset
-                        val decimeters = if ((packed and 0x8000) != 0) (packed and 0x7FFF) * 10 else packed - 10000
-
-                        dataDecoder.decodeData( Protocol.Companion.TelemetryData( BARO_ALTITUDE, decimeters))
                     }
                 }
                 LINK_STATS.toByte() -> {

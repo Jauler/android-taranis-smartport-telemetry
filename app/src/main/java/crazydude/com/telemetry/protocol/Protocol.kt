@@ -101,9 +101,6 @@ abstract class Protocol(val dataDecoder: DataDecoder) {
         const val IMAGE_HANDSHAKE = 121
         const val IMAGE_DATA = 122
 
-        //barometric altitude, decimeters
-        const val BARO_ALTITUDE = 123
-
         class TelemetryData(val telemetryType: Int, val data: Int, val rawData: ByteArray? = null) {
             override fun equals(other: Any?): Boolean {
                 if (this === other) return true
