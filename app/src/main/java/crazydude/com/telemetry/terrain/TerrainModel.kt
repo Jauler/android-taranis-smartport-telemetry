@@ -68,12 +68,15 @@ class TerrainModel(private val pack: TerrainPack) {
      * next to the pilot would otherwise shade the whole sky)
      * @param margin extra clearance required above every obstacle
      * @param wavelength wavelength of the radio link in meters, 0 for the bare straight line
+     * @param aircraftAltitude altitude of the aircraft above sea level; when given, the
+     * stretches of the line which are obstructed at that altitude are returned as well
      * @return null when the terrain under the antenna or the aircraft is unknown
      */
     fun minLineOfSightAltitude(
         antennaLat: Double, antennaLon: Double, antennaHeight: Double,
         aircraftLat: Double, aircraftLon: Double,
-        ignoreNear: Double, margin: Double, wavelength: Double = 0.0
+        ignoreNear: Double, margin: Double, wavelength: Double = 0.0,
+        aircraftAltitude: Double = Double.NaN
     ): LineOfSight? {
         val a = DoubleArray(2)
         val b = DoubleArray(2)
@@ -98,8 +101,12 @@ class TerrainModel(private val pack: TerrainPack) {
         var obstacleTop = surfaceBelow.toDouble()
         var complete = true
 
+        // Stretches of the line (distances from the antenna) which are obstructed
+        val blocked = ArrayList<DoubleArray>()
+
         val step = (objects?.cellSize ?: ground.cellSize) * 0.5
         val samples = min(ceil(distance / step).toInt(), MAX_SAMPLES)
+        val spacing = if (samples > 0) distance / samples else 0.0
         for (i in 1 until samples) {
             val t = i.toDouble() / samples
             val d = distance * t
@@ -117,7 +124,19 @@ class TerrainModel(private val pack: TerrainPack) {
             } else {
                 0.0
             }
-            val needed = antennaAltitude + (top + margin + fresnel + bulge - antennaAltitude) / t
+            // what the line has to clear here
+            val clear = top + margin + fresnel + bulge
+            val needed = antennaAltitude + (clear - antennaAltitude) / t
+            if (!aircraftAltitude.isNaN() &&
+                antennaAltitude + (aircraftAltitude - antennaAltitude) * t < clear
+            ) {
+                val last = if (blocked.isEmpty()) null else blocked[blocked.size - 1]
+                if (last != null && d - spacing / 2 <= last[1] + 1e-6) {
+                    last[1] = d + spacing / 2
+                } else {
+                    blocked.add(doubleArrayOf(d - spacing / 2, d + spacing / 2))
+                }
+            }
             if (needed > required) {
                 required = needed
                 obstacleX = x
@@ -127,10 +146,59 @@ class TerrainModel(private val pack: TerrainPack) {
             }
         }
 
+        if (!aircraftAltitude.isNaN() && aircraftAltitude < surfaceBelow + margin) {
+            // below the top of what stands right under the aircraft
+            blocked.add(doubleArrayOf(distance - spacing, distance))
+        }
+
         val geo = DoubleArray(2)
         projection.inverse(obstacleX, obstacleY, geo)
-        return LineOfSight(required, distance, geo[0], geo[1], obstacleDistance, obstacleTop, complete)
+        return LineOfSight(
+            required, distance, geo[0], geo[1], obstacleDistance, obstacleTop, complete,
+            blockedSegments(blocked, a, dx, dy, distance)
+        )
     }
+
+    /**
+     * Turns obstructed stretches (distances from the antenna) into segments on the map. A stretch
+     * is often a single tree line a few meters deep: each one is widened to a length which can
+     * be seen when the whole line is on the screen, and stretches which then touch are joined.
+     */
+    private fun blockedSegments(
+        stretches: List<DoubleArray>, origin: DoubleArray, dx: Double, dy: Double, distance: Double
+    ): List<Segment> {
+        if (stretches.isEmpty() || distance <= 0.0) return emptyList()
+        val minLength = Math.max(MIN_MARK_LENGTH, distance * MIN_MARK_FRACTION)
+        val widened = ArrayList<DoubleArray>()
+        for (stretch in stretches) {
+            var from = stretch[0]
+            var to = stretch[1]
+            if (to - from < minLength) {
+                val middle = (from + to) / 2
+                from = middle - minLength / 2
+                to = middle + minLength / 2
+            }
+            from = Math.max(0.0, from)
+            to = min(distance, to)
+            val last = if (widened.isEmpty()) null else widened[widened.size - 1]
+            if (last != null && from <= last[1]) {
+                last[1] = Math.max(last[1], to)
+            } else {
+                widened.add(doubleArrayOf(from, to))
+            }
+        }
+        val geo = DoubleArray(2)
+        return widened.map {
+            projection.inverse(origin[0] + dx * it[0] / distance, origin[1] + dy * it[0] / distance, geo)
+            val fromLat = geo[0]
+            val fromLon = geo[1]
+            projection.inverse(origin[0] + dx * it[1] / distance, origin[1] + dy * it[1] / distance, geo)
+            Segment(fromLat, fromLon, geo[0], geo[1])
+        }
+    }
+
+    /** A piece of the line between antenna and aircraft. */
+    class Segment(val fromLat: Double, val fromLon: Double, val toLat: Double, val toLon: Double)
 
     class LineOfSight(
         /** Lowest altitude above sea level with a free line to the antenna. */
@@ -145,12 +213,18 @@ class TerrainModel(private val pack: TerrainPack) {
         /** Elevation of the top of that obstacle above sea level. */
         val obstacleTop: Double,
         /** False when part of the line crosses an area without terrain data. */
-        val complete: Boolean
+        val complete: Boolean,
+        /** Where the line is obstructed at the given aircraft altitude; empty if it is free or no altitude was given. */
+        val blocked: List<Segment> = emptyList()
     )
 
     companion object {
         /** 4/3 of the mean Earth radius: standard atmosphere bends radio waves slightly. */
         const val EFFECTIVE_EARTH_RADIUS = 6371000.0 * 4.0 / 3.0
+
+        /** Obstructed stretches are shown at least this long: meters, and part of the whole line. */
+        private const val MIN_MARK_LENGTH = 30.0
+        private const val MIN_MARK_FRACTION = 0.02
 
         /** Part of the radius of the first Fresnel zone which has to stay clear. */
         const val FRESNEL_CLEARANCE = 0.6
