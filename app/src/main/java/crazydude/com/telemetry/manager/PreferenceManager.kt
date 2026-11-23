@@ -17,6 +17,7 @@ class PreferenceManager(context: Context) {
         const val SENSOR_HEIGHT_ABOVE_GROUND = "Height above ground"
         const val SENSOR_ALTITUDE_LIMIT = "Altitude limit"
         const val SENSOR_GROUND_ELEVATION = "Ground elevation"
+        const val SENSOR_SURFACE_ELEVATION = "Elevation with trees and buildings"
         const val SENSOR_MIN_LOS_ALTITUDE = "Min line of sight altitude"
 
         val sensors = setOf(
@@ -50,12 +51,14 @@ class PreferenceManager(context: Context) {
             SensorSetting(SENSOR_HEIGHT_ABOVE_GROUND, 9, "bottom"),
             SensorSetting(SENSOR_ALTITUDE_LIMIT, 10, "bottom"),
             SensorSetting(SENSOR_GROUND_ELEVATION, 11, "bottom"),
-            SensorSetting(SENSOR_MIN_LOS_ALTITUDE, 12, "bottom")
+            SensorSetting(SENSOR_MIN_LOS_ALTITUDE, 13, "bottom"),
+            SensorSetting(SENSOR_SURFACE_ELEVATION, 12, "bottom")
         )
 
         /** Sensors which only work with terrain data; hidden when there is none. */
         val terrainSensors = setOf(
-            SENSOR_HEIGHT_ABOVE_GROUND, SENSOR_ALTITUDE_LIMIT, SENSOR_GROUND_ELEVATION, SENSOR_MIN_LOS_ALTITUDE
+            SENSOR_HEIGHT_ABOVE_GROUND, SENSOR_ALTITUDE_LIMIT, SENSOR_GROUND_ELEVATION, SENSOR_MIN_LOS_ALTITUDE,
+            SENSOR_SURFACE_ELEVATION
         )
     }
 

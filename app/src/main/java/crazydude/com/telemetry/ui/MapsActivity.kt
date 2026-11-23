@@ -220,6 +220,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private lateinit var heightAboveGround: TextView
     private lateinit var altitudeLimit: TextView
     private lateinit var groundElevation: TextView
+    private lateinit var surfaceElevation: TextView
     private lateinit var minLosAltitude: TextView
 
     private lateinit var sensorViewMap: HashMap<String, View>
@@ -368,6 +369,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         heightAboveGround = findViewById(R.id.height_above_ground)
         altitudeLimit = findViewById(R.id.altitude_limit)
         groundElevation = findViewById(R.id.ground_elevation)
+        surfaceElevation = findViewById(R.id.surface_elevation)
         minLosAltitude = findViewById(R.id.min_los_altitude)
 
         sensorViewMap = hashMapOf(
@@ -401,6 +403,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             Pair(PreferenceManager.SENSOR_HEIGHT_ABOVE_GROUND, heightAboveGround),
             Pair(PreferenceManager.SENSOR_ALTITUDE_LIMIT, altitudeLimit),
             Pair(PreferenceManager.SENSOR_GROUND_ELEVATION, groundElevation),
+            Pair(PreferenceManager.SENSOR_SURFACE_ELEVATION, surfaceElevation),
             Pair(PreferenceManager.SENSOR_MIN_LOS_ALTITUDE, minLosAltitude)
         )
 
@@ -3055,6 +3058,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)
         altitudeLimit.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         groundElevation.text = formatTerrainHeight(state.groundElevation)
+        surfaceElevation.text = formatTerrainHeight(state.surfaceElevation)
         minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
         minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
     }
