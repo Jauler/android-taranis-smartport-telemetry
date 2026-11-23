@@ -124,7 +124,7 @@ class PreferenceManager(context: Context) {
     }
 
     fun getSensorsSettings(): List<SensorSetting> {
-        return sensors.map {
+        val settings = sensors.map {
             SensorSetting(
                 it.name,
                 sharedPreferences.getInt(it.name + "_index", it.index),
@@ -132,6 +132,20 @@ class PreferenceManager(context: Context) {
                 sharedPreferences.getBoolean(it.name + "_shown", it.shown)
             )
         }
+        // Once the user has saved an order, the default index of a sensor added later can be
+        // the saved index of another one: put such new sensors after the saved ones instead.
+        val (added, saved) = settings.partition { !sharedPreferences.contains(it.name + "_index") }
+        if (added.isEmpty() || saved.isEmpty()) return settings
+        val next = HashMap<String, Int>()
+        saved.forEach {
+            next[it.position] = Math.max(next[it.position] ?: 0, it.index + 1)
+        }
+        val moved = added.sortedBy { it.index }.associate { setting ->
+            val index = next[setting.position] ?: 0
+            next[setting.position] = index + 1
+            setting.name to setting.copy(index = index)
+        }
+        return settings.map { moved[it.name] ?: it }
     }
 
     fun setSensorsSettings(data: List<SensorSetting>) {
