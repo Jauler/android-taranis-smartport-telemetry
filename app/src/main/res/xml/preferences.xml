@@ -172,6 +172,14 @@
                 android:key="terrain_los_ignore_near"/>
 
         <ListPreference
+                android:title="Radio link frequency"
+                android:summary="A radio link needs free space around the straight line (most of its first Fresnel zone): the lower the frequency and the longer the distance, the more\n%s"
+                android:entries="@array/TerrainFrequencyEntries"
+                android:entryValues="@array/TerrainFrequencyValues"
+                android:defaultValue="5800"
+                android:key="terrain_los_frequency"/>
+
+        <ListPreference
                 android:title="Clearance above obstacles"
                 android:summary="Extra height the line of sight has to keep above trees and buildings\n%s"
                 android:entries="@array/TerrainMarginEntries"

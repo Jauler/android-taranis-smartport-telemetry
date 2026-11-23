@@ -57,16 +57,23 @@ class TerrainModel(private val pack: TerrainPack) {
      * altitude needed to look over it is extrapolated to the aircraft position. Earth curvature
      * is taken into account with the usual 4/3 effective radius for radio waves.
      *
+     * A radio link needs more than the bare line: most of its energy travels inside the first
+     * Fresnel zone around it, and the link is as good as unobstructed only while 60 % of the
+     * radius of that zone stays clear. With a [wavelength] every obstacle is raised by that
+     * much: sqrt(wavelength * d1 * d2 / (d1 + d2)) for the distances to the two ends, so nothing
+     * at the antenna and at the aircraft and the most half way.
+     *
      * @param antennaHeight height of the antenna above the ground at its position
      * @param ignoreNear obstacles closer than this to the antenna are ignored (trees right
      * next to the pilot would otherwise shade the whole sky)
      * @param margin extra clearance required above every obstacle
+     * @param wavelength wavelength of the radio link in meters, 0 for the bare straight line
      * @return null when the terrain under the antenna or the aircraft is unknown
      */
     fun minLineOfSightAltitude(
         antennaLat: Double, antennaLon: Double, antennaHeight: Double,
         aircraftLat: Double, aircraftLon: Double,
-        ignoreNear: Double, margin: Double
+        ignoreNear: Double, margin: Double, wavelength: Double = 0.0
     ): LineOfSight? {
         val a = DoubleArray(2)
         val b = DoubleArray(2)
@@ -105,7 +112,12 @@ class TerrainModel(private val pack: TerrainPack) {
                 continue
             }
             val bulge = d * (distance - d) / (2.0 * EFFECTIVE_EARTH_RADIUS)
-            val needed = antennaAltitude + (top + margin + bulge - antennaAltitude) / t
+            val fresnel = if (wavelength > 0.0) {
+                FRESNEL_CLEARANCE * sqrt(wavelength * d * (distance - d) / distance)
+            } else {
+                0.0
+            }
+            val needed = antennaAltitude + (top + margin + fresnel + bulge - antennaAltitude) / t
             if (needed > required) {
                 required = needed
                 obstacleX = x
@@ -139,6 +151,14 @@ class TerrainModel(private val pack: TerrainPack) {
     companion object {
         /** 4/3 of the mean Earth radius: standard atmosphere bends radio waves slightly. */
         const val EFFECTIVE_EARTH_RADIUS = 6371000.0 * 4.0 / 3.0
+
+        /** Part of the radius of the first Fresnel zone which has to stay clear. */
+        const val FRESNEL_CLEARANCE = 0.6
+
+        /** Wavelength in meters of a radio frequency in MHz. */
+        fun wavelengthOf(megahertz: Double): Double {
+            return if (megahertz > 0.0) 299.792458 / megahertz else 0.0
+        }
 
         private const val MAX_SAMPLES = 40000
     }

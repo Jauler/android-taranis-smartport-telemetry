@@ -196,6 +196,7 @@ class TerrainMonitor(
         val antennaHeight: Double,
         val ignoreNear: Double,
         val margin: Double,
+        val wavelength: Double,
         val losWarnMinDistance: Float
     )
 
@@ -212,6 +213,7 @@ class TerrainMonitor(
             preferenceManager.getTerrainAntennaHeight().toDouble(),
             preferenceManager.getTerrainLosIgnoreNear().toDouble(),
             preferenceManager.getTerrainLosMargin().toDouble(),
+            TerrainModel.wavelengthOf(preferenceManager.getTerrainLosFrequency().toDouble()),
             preferenceManager.getTerrainLosWarnMinDistance()
         )
     }
@@ -256,7 +258,7 @@ class TerrainMonitor(
                 if (antenna == null || los != null) continue
                 los = terrain.minLineOfSightAltitude(
                     antenna.lat, antenna.lon, input.antennaHeight,
-                    lat, lon, input.ignoreNear, input.margin
+                    lat, lon, input.ignoreNear, input.margin, input.wavelength
                 )
             }
             if (los != null) {

@@ -118,6 +118,26 @@ class TerrainModelTest {
         assertTrue("min altitude ${los.minAltitude}", los.minAltitude in 185.5..186.5)
         assertTrue(los.complete)
 
+        // A 5.8 GHz link needs 60 % of the first Fresnel zone clear above the wall:
+        // 0.6 * sqrt(0.0517 * 1000 * 2000 / 3000) = 3.5 m there, three times that at the aircraft
+        val radio = model.minLineOfSightAltitude(
+            c[1].toDouble(), c[2].toDouble(), 2.0, c[3].toDouble(), c[4].toDouble(), 0.0, 0.0,
+            TerrainModel.wavelengthOf(5800.0)
+        )!!
+        val extra = radio.minAltitude - los.minAltitude
+        assertTrue("Fresnel clearance $extra", extra in 10.3..10.7)
+        // the lower the frequency, the more
+        val lower = model.minLineOfSightAltitude(
+            c[1].toDouble(), c[2].toDouble(), 2.0, c[3].toDouble(), c[4].toDouble(), 0.0, 0.0,
+            TerrainModel.wavelengthOf(900.0)
+        )!!
+        assertTrue(lower.minAltitude > radio.minAltitude + 10.0)
+        // and no wavelength is the bare line
+        val bare = model.minLineOfSightAltitude(
+            c[1].toDouble(), c[2].toDouble(), 2.0, c[3].toDouble(), c[4].toDouble(), 0.0, 0.0, 0.0
+        )!!
+        assertEquals(los.minAltitude, bare.minAltitude, 0.0)
+
         // A 100 m mast instead of a 2 m one lowers the requirement accordingly
         val mast = model.minLineOfSightAltitude(
             c[1].toDouble(), c[2].toDouble(), 100.0, c[3].toDouble(), c[4].toDouble(), 0.0, 0.0
