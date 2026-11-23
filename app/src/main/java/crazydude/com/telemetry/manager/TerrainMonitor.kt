@@ -168,6 +168,15 @@ class TerrainMonitor(
     fun destroy() {
         mainHandler.removeCallbacksAndMessages(null)
         generation++
+        // Closed on the worker thread, after whatever it is still computing
+        val terrain = model
+        worker?.post {
+            try {
+                terrain?.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Cannot close the terrain data", e)
+            }
+        }
         thread?.quitSafely()
         thread = null
         worker = null

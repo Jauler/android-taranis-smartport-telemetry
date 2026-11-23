@@ -1,9 +1,12 @@
 package crazydude.com.telemetry.ui
 
 import android.app.Activity
+import android.app.ProgressDialog
 import android.content.*
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.widget.EditText
@@ -14,6 +17,7 @@ import crazydude.com.telemetry.R
 import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
 import androidx.preference.ListPreference
+import crazydude.com.telemetry.terrain.TerrainInstaller
 import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.utils.FileLogger
 import java.io.IOException
@@ -22,7 +26,10 @@ class PrefsFragment : PreferenceFragmentCompat() {
 
     companion object {
         private const val REQUEST_IMPORT_FLIGHT_PLAN = 100
+        private const val REQUEST_INSTALL_TERRAIN = 101
     }
+
+    private val handler = Handler(Looper.getMainLooper())
 
     private lateinit var prefManager: PreferenceManager
     private lateinit var flightPlanManager: FlightPlanManager
@@ -105,9 +112,18 @@ class PrefsFragment : PreferenceFragmentCompat() {
             "terrain_los_warn_min_distance", 200f, 0f, 100000f,
             "The line of sight readout does not turn red while the aircraft is closer than this to the home point"
         )
+        findPreference("terrain_info").setOnPreferenceClickListener {
+            showTerrainDialog()
+            return@setOnPreferenceClickListener true
+        }
         updateTerrainInfo()
 
         updateSummary()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateTerrainInfo()
     }
 
     private fun formatNumber(value: Float): String {
@@ -167,13 +183,91 @@ class PrefsFragment : PreferenceFragmentCompat() {
             null
         }
         if (model != null) {
-            preference.summary = model.description
+            preference.summary = model.description + "\nTap to replace or remove"
             model.close()
         } else {
-            val dir = TerrainLoader.userDirectory(ctx)
             preference.summary = "Not installed. Height above ground, altitude limit and line of sight " +
-                    "need a terrain pack (*.tpk)" + (if (dir != null) " in\n${dir.absolutePath}" else "")
+                    "need it.\nTap to install it from a terrain pack file (*.tpk) on this phone"
         }
+    }
+
+    private fun megabytes(bytes: Long): Long {
+        return (bytes + 500000L) / 1000000L
+    }
+
+    private fun pickTerrainFile() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT)
+        intent.type = "*/*"
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+        startActivityForResult(
+            Intent.createChooser(intent, "Select terrain pack (*.tpk)"), REQUEST_INSTALL_TERRAIN
+        )
+    }
+
+    private fun showTerrainDialog() {
+        val ctx = context ?: return
+        if (!TerrainInstaller.isInstalled(ctx)) {
+            pickTerrainFile()
+            return
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle("Terrain data")
+            .setItems(arrayOf("Install from another file", "Remove the installed data")) { _, which ->
+                when (which) {
+                    0 -> pickTerrainFile()
+                    1 -> {
+                        TerrainInstaller.remove(ctx.applicationContext)
+                        Toast.makeText(ctx, "Terrain data removed", Toast.LENGTH_SHORT).show()
+                        updateTerrainInfo()
+                    }
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    /** Copies the picked file into place on a background thread, with a progress dialog. */
+    private fun installTerrainFrom(uri: Uri) {
+        val ctx = context ?: return
+        val appContext = ctx.applicationContext
+        var size = -1L
+        try {
+            appContext.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use {
+                if (it.moveToFirst() && !it.isNull(0)) size = it.getLong(0)
+            }
+        } catch (e: Exception) {
+        }
+
+        val dialog = ProgressDialog(ctx)
+        dialog.setCancelable(false)
+        dialog.setMessage("Installing terrain data")
+        if (size > 0) {
+            dialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+            dialog.max = megabytes(size).toInt()
+            dialog.setProgressNumberFormat("%1d of %2d MB")
+        }
+        dialog.show()
+
+        Thread {
+            val message = try {
+                val input = appContext.contentResolver.openInputStream(uri)
+                    ?: throw IOException("cannot open the file")
+                val description = TerrainInstaller.installFromStream(appContext, input) { copied ->
+                    handler.post { dialog.progress = megabytes(copied).toInt() }
+                }
+                "Terrain data installed: $description"
+            } catch (e: Exception) {
+                "Cannot install terrain data: ${e.message}"
+            }
+            handler.post {
+                try {
+                    dialog.dismiss()
+                } catch (e: Exception) {
+                }
+                Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
+                if (isAdded) updateTerrainInfo()
+            }
+        }.start()
     }
 
     private fun displayName(uri: Uri): String {
@@ -189,6 +283,10 @@ class PrefsFragment : PreferenceFragmentCompat() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_INSTALL_TERRAIN && resultCode == Activity.RESULT_OK) {
+            data?.data?.let { installTerrainFrom(it) }
+            return
+        }
         if (requestCode == REQUEST_IMPORT_FLIGHT_PLAN && resultCode == Activity.RESULT_OK) {
             data?.data?.let { uri ->
                 try {

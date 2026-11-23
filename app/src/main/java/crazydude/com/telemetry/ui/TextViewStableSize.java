@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 
@@ -23,6 +24,12 @@ public class TextViewStableSize extends AppCompatTextView {
 
     private int seenMaxWidth = 0;
 
+    //Text and icons are drawn at this fraction of the sizes given in the layout ("Sensor size"
+    //in the settings). Not initialized here: the base class sets up the icons of the layout
+    //from its constructor, before the initializers of this class run. Zero stands for 1.
+    private float scale;
+    private float baseTextSizePx;
+
     public TextViewStableSize(Context context) {
         this(context, null);
     }
@@ -30,6 +37,55 @@ public class TextViewStableSize extends AppCompatTextView {
     public TextViewStableSize(Context context, AttributeSet attrs) {
         super(context, attrs);
         setAttributes(attrs);
+        baseTextSizePx = getTextSize();
+    }
+
+    private float currentScale() {
+        return scale > 0f ? scale : 1f;
+    }
+
+    /**
+     * Draws the text and the icons at the given fraction of their sizes in the layout.
+     */
+    public void setScale(float newScale) {
+        if (newScale <= 0f || newScale == currentScale()) {
+            return;
+        }
+        scale = newScale;
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, baseTextSizePx * newScale);
+        Drawable[] relative = getCompoundDrawablesRelative();
+        if (relative[0] != null || relative[2] != null) {
+            setCompoundDrawablesRelative(scaled(relative[0]), scaled(relative[1]), scaled(relative[2]), scaled(relative[3]));
+        } else {
+            Drawable[] absolute = getCompoundDrawables();
+            setCompoundDrawables(scaled(absolute[0]), scaled(absolute[1]), scaled(absolute[2]), scaled(absolute[3]));
+        }
+        //the width kept so far belongs to the old size
+        seenMaxWidth = 0;
+        setMinWidth(0);
+        requestLayout();
+    }
+
+    private Drawable scaled(Drawable drawable) {
+        if (drawable != null) {
+            float s = currentScale();
+            drawable.setBounds(0, 0,
+                    Math.round(drawable.getIntrinsicWidth() * s),
+                    Math.round(drawable.getIntrinsicHeight() * s));
+        }
+        return drawable;
+    }
+
+    //Icons changed at run time (signal strength, battery level...) come through these two
+
+    @Override
+    public void setCompoundDrawablesWithIntrinsicBounds(Drawable left, Drawable top, Drawable right, Drawable bottom) {
+        setCompoundDrawables(scaled(left), scaled(top), scaled(right), scaled(bottom));
+    }
+
+    @Override
+    public void setCompoundDrawablesRelativeWithIntrinsicBounds(Drawable start, Drawable top, Drawable end, Drawable bottom) {
+        setCompoundDrawablesRelative(scaled(start), scaled(top), scaled(end), scaled(bottom));
     }
 
     private void setAttributes(AttributeSet attrs) {
@@ -55,7 +111,7 @@ public class TextViewStableSize extends AppCompatTextView {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-        int wPaddingAndIcon = this.getPaddingLeft() + this.getPaddingRight() + this.dpToPx(iconWidthDp, getContext());
+        int wPaddingAndIcon = this.getPaddingLeft() + this.getPaddingRight() + this.dpToPx(iconWidthDp * currentScale(), getContext());
 
         Rect bounds = new Rect();
         getPaint().getTextBounds(this.mMinText,0, mMinText.length(), bounds);

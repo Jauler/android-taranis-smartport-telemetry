@@ -49,6 +49,7 @@ import crazydude.com.telemetry.manager.Fr24Manager
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.manager.SensorTimeoutManager
 import crazydude.com.telemetry.manager.TerrainMonitor
+import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.maps.MapLabel
 import crazydude.com.telemetry.maps.MapLine
 import crazydude.com.telemetry.maps.MapMarker
@@ -154,6 +155,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var flightPlanLabels: MutableList<MapLabel> = mutableListOf()
     private var homeLine: MapLine? = null
     private lateinit var terrainMonitor: TerrainMonitor
+    private var terrainSignature = ""
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             runOnUiThread {
@@ -283,6 +285,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         setContentView(R.layout.activity_maps)
 
         preferenceManager = PreferenceManager(this)
+        terrainSignature = TerrainLoader.signature(applicationContext)
         terrainMonitor = TerrainMonitor(applicationContext, preferenceManager, this)
 
         tts = TextToSpeech(this) { status ->
@@ -1226,7 +1229,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         updateScreenOrientation()
         drawFlightPlans()
         updateHomeLine()
+        applySensorScale()
         // Settings (height limit, altitude reference, antenna) may have changed while away
+        reloadTerrainIfChanged()
         updateTerrainAntenna()
         if (checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
@@ -3013,6 +3018,22 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
      */
     private fun antennaPosition(): Position? {
         return if (isInReplayMode()) null else map?.getMyLocation()
+    }
+
+    /** "Sensor size" of the settings: the text and icons of both sensor bars. */
+    private fun applySensorScale() {
+        val scale = preferenceManager.getSensorScale()
+        sensorViewMap.values.forEach { (it as? TextViewStableSize)?.setScale(scale) }
+    }
+
+    /** Terrain data may have been installed or removed in the settings. */
+    private fun reloadTerrainIfChanged() {
+        val signature = TerrainLoader.signature(applicationContext)
+        if (signature == terrainSignature) return
+        terrainSignature = signature
+        terrainMonitor.destroy()
+        terrainMonitor = TerrainMonitor(applicationContext, preferenceManager, this)
+        updateSensorsPlacement()
     }
 
     private fun updateTerrainAntenna() {
