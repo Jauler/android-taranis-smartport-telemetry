@@ -144,6 +144,28 @@
         <item>60</item>
     </string-array>
 
+    <string-array name="SensorScaleEntries">
+        <item>120 %</item>
+        <item>110 %</item>
+        <item>100 % (normal)</item>
+        <item>90 %</item>
+        <item>80 %</item>
+        <item>70 %</item>
+        <item>60 %</item>
+        <item>50 %</item>
+    </string-array>
+
+    <string-array name="SensorScaleValues">
+        <item>120</item>
+        <item>110</item>
+        <item>100</item>
+        <item>90</item>
+        <item>80</item>
+        <item>70</item>
+        <item>60</item>
+        <item>50</item>
+    </string-array>
+
     <string-array name="TerrainAltReferenceEntries">
         <item>Height above the takeoff point</item>
         <item>Altitude above sea level</item>

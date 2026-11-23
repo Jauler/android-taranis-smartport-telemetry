@@ -1229,6 +1229,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         updateScreenOrientation()
         drawFlightPlans()
         updateHomeLine()
+        applySensorScale()
         // Settings (height limit, altitude reference, antenna) may have changed while away
         reloadTerrainIfChanged()
         updateTerrainAntenna()
@@ -3017,6 +3018,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
      */
     private fun antennaPosition(): Position? {
         return if (isInReplayMode()) null else map?.getMyLocation()
+    }
+
+    /** "Sensor size" of the settings: the text and icons of both sensor bars. */
+    private fun applySensorScale() {
+        val scale = preferenceManager.getSensorScale()
+        sensorViewMap.values.forEach { (it as? TextViewStableSize)?.setScale(scale) }
     }
 
     /** Terrain data may have been installed or removed in the settings. */

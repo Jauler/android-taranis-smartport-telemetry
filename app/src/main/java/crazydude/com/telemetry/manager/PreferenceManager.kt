@@ -180,6 +180,12 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getBoolean("playback_autostart", true)
     }
 
+    /** Size of the text and icons of the sensor bars, as a fraction of the normal size. */
+    fun getSensorScale(): Float {
+        val percent = sharedPreferences.getString("sensor_scale", "100")?.toFloatOrNull() ?: 100f
+        return Math.max(40f, Math.min(150f, percent)) / 100f
+    }
+
     fun getPlaybackDuration() : Int {
         return sharedPreferences.getString("playback_duration", "30")?.toInt() ?: 30
     }

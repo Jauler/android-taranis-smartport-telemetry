@@ -227,6 +227,14 @@
         </Preference>
 
         <ListPreference
+                android:title="Sensor size"
+                android:summary="Text and icons of the sensor bars: %s"
+                android:entries="@array/SensorScaleEntries"
+                android:entryValues="@array/SensorScaleValues"
+                android:defaultValue="100"
+                android:key="sensor_scale"/>
+
+        <ListPreference
                 android:title="Battery units"
                 android:summary="(CLI smartport_fuel_unit)\n%s"
                 android:entries="@array/BatteryUnits"
