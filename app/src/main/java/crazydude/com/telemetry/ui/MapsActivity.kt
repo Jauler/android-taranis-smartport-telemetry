@@ -42,6 +42,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.nex3z.flowlayout.FlowLayout
+import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.converter.Converter
 import crazydude.com.telemetry.manager.FlightPlanManager
@@ -308,6 +309,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         mapType = preferenceManager.getMapType()
         followMode = savedInstanceState?.getBoolean("follow_mode", true) ?: true
         replayFileString = savedInstanceState?.getString("replay_file_name")
+        if (BuildConfig.DEBUG && savedInstanceState == null) {
+            // debug builds: adb shell am start -n <package>/crazydude.com.telemetry.ui.MapsActivity --es debug_replay "<name>.tlm"
+            intent?.getStringExtra("debug_replay")?.let { replayFileString = it }
+        }
         fullscreenWindow = preferenceManager.isFullscreenWindow()
 
         lastSelectedDataPooler = preferenceManager.getLastSelectedDataPooler()

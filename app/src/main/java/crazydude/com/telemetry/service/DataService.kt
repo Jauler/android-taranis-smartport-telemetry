@@ -4,8 +4,10 @@ import android.Manifest
 import android.annotation.TargetApi
 import android.app.*
 import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbDeviceConnection
 import android.os.*
@@ -13,6 +15,7 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.hoho.android.usbserial.driver.UsbSerialPort
+import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.logger.OtxCsvLogger
 import crazydude.com.telemetry.manager.PreferenceManager
@@ -21,6 +24,7 @@ import crazydude.com.telemetry.protocol.pollers.BluetoothDataPoller
 import crazydude.com.telemetry.protocol.pollers.BluetoothLeDataPoller
 import crazydude.com.telemetry.protocol.decoder.DataDecoder
 import crazydude.com.telemetry.protocol.pollers.DataPoller
+import crazydude.com.telemetry.protocol.pollers.FileDataPoller
 import crazydude.com.telemetry.protocol.pollers.UsbDataPoller
 import crazydude.com.telemetry.ui.MapsActivity
 import java.io.File
@@ -48,6 +52,10 @@ class DataService : Service(), DataDecoder.Listener {
     private lateinit var preferenceManager: PreferenceManager
     val points: ArrayList<Position> = ArrayList()
     private var notification: Notification? = null
+    private var debugReceiver: BroadcastReceiver? = null
+    private var debugFile: File? = null
+    private var debugPosition = 0L
+    private var debugDurationMs = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -77,6 +85,52 @@ class DataService : Service(), DataDecoder.Listener {
             )
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .build()
+
+        if (BuildConfig.DEBUG) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    onDebugCommand(intent)
+                }
+            }
+            registerReceiver(receiver, IntentFilter(DEBUG_ACTION))
+            debugReceiver = receiver
+        }
+    }
+
+    /**
+     * Debug builds only: a live connection played from a recorded log, to test everything behind
+     * the connection without a radio.
+     *
+     *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd connect \
+     *         --es file "2026-11-02 15-57-26.tlm" --ei duration 120
+     *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd drop
+     *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd reconnect
+     *
+     * connect starts the log from its beginning (like connecting from the app), drop loses the
+     * link like a radio going out of range, reconnect continues where drop left off (like the
+     * automatic reconnection). duration is the time to play the whole file in, in seconds.
+     */
+    private fun onDebugCommand(intent: Intent) {
+        when (intent.getStringExtra("cmd")) {
+            "connect" -> {
+                val name = intent.getStringExtra("file") ?: return
+                debugFile = File(Environment.getExternalStoragePublicDirectory("TelemetryLogs"), name)
+                debugDurationMs = intent.getIntExtra("duration", 120) * 1000L
+                dataPoller?.disconnect()
+                logListener = null
+                dataPoller = FileDataPoller(this, debugFile!!, 0L, debugDurationMs)
+            }
+            "drop" -> {
+                val poller = dataPoller as? FileDataPoller ?: return
+                debugPosition = poller.position
+                poller.disconnect()
+            }
+            "reconnect" -> {
+                val file = debugFile ?: return
+                if (dataPoller != null) return
+                dataPoller = FileDataPoller(this, file, debugPosition, debugDurationMs)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -183,6 +237,8 @@ class DataService : Service(), DataDecoder.Listener {
 
     override fun onDestroy() {
         super.onDestroy()
+        debugReceiver?.let { unregisterReceiver(it) }
+        debugReceiver = null
         dataPoller?.disconnect()
         dataPoller = null
     }
@@ -413,5 +469,9 @@ class DataService : Service(), DataDecoder.Listener {
         dataPoller = null
         satellites = 0
         hasGPSFix = false
+    }
+
+    companion object {
+        const val DEBUG_ACTION = "jauler.telemetry.debug.LINK"
     }
 }
