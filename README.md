@@ -5,8 +5,8 @@ the quad's position on a satellite or topographic map, along with its altitude, 
 from home, battery and link quality. Every flight is recorded so it can be replayed later or
 exported to GPX/KML. With an offline terrain pack it also knows the ground under the quad: it
 shows the height above ground, and how high the quad has to stay to keep a clear radio line of
-sight back to the pilot. CRSF (ExpressLRS, Crossfire) is the main protocol; FrSky SmartPort, LTM
-and MAVLink also work.
+sight back to the pilot. The app is used and tested with CRSF (ExpressLRS). The FrSky
+SmartPort, LTM and MAVLink decoders are still in the code but are not tested and may not work.
 
 ![General view](doc/images/screenshot_general.jpg)
 
@@ -65,7 +65,20 @@ for wiring them.
   bottom bars or hidden.
 - **Recording and replay:** every flight is logged (raw `.tlm` and CSV) and can be replayed with
   a seek bar, renamed, deleted or exported to GPX and KML.
-- **Flight plans:** import CSV files (`lat,lon` per line) to draw planned routes on the map.
+- **Flight plans:** import CSV files (`lat,lon` per line) to draw planned routes on the map,
+  with the name of each plan shown next to it. Several plans can be shown at once and toggled
+  in the settings.
+
+  ![Flight plans on the map](doc/images/screenshot_flightplan.jpg)
+
+- **Nearby aircraft (FlightRadar24):** the app fetches real aircraft around the phone from
+  FlightRadar24 (an internet connection is needed) and draws them on the map. When an aircraft comes close
+  to the drone (within 5 km and below 1500 m by default), a voice warning gives its direction,
+  distance and altitude: "Traffic, north-east, 3.2 kilometers, altitude 900 meters". The search radius, ceilings, warning distance and refresh rate are
+  set in **Settings > FlightRadar24 Nearby Aircraft**; it is off by default.
+
+  ![Aircraft from FlightRadar24 on the map](doc/images/screenshot_fr24.jpg)
+
 - **Voice messages** for connection changes, and **automatic reconnection** over Bluetooth.
 
 ### Terrain: height above ground and line of sight
