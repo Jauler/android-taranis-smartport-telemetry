@@ -6,9 +6,11 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
+import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.maps.Position
 import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.terrain.TerrainModel
+import java.util.Locale
 
 /**
  * Keeps the terrain related readouts up to date while the aircraft moves:
@@ -67,6 +69,8 @@ class TerrainMonitor(
 
     companion object {
         private const val TAG = "Terrain"
+        /** Debug builds log every computed state under this tag, see [describe]. */
+        private const val STATE_TAG = "TerrainState"
         private const val MIN_UPDATE_INTERVAL_MS = 400L
         const val REFERENCE_TAKEOFF = "takeoff"
         const val REFERENCE_MSL = "msl"
@@ -150,6 +154,7 @@ class TerrainMonitor(
 
     /** Forgets everything known about the flight (new connection, replay restart). */
     fun reset() {
+        if (BuildConfig.DEBUG) Log.d(STATE_TAG, "reset")
         aircraft = null
         altitude = Float.NaN
         takeoff = null
@@ -235,6 +240,7 @@ class TerrainMonitor(
             Log.w(TAG, "Terrain evaluation failed", e)
             return
         }
+        if (BuildConfig.DEBUG) Log.d(STATE_TAG, describe(input, state))
         mainHandler.post {
             if (input.generation == generation) {
                 listener.onTerrainState(state)
@@ -313,5 +319,21 @@ class TerrainMonitor(
             ground,
             if (terrain.hasObjects) terrain.surfaceAt(lat, lon) else Float.NaN
         )
+    }
+
+    /**
+     * One line with the inputs and the outputs of a computation, for comparing runs (debug
+     * builds only): the same inputs have to give the same outputs.
+     */
+    private fun describe(input: Input, state: State): String {
+        fun p(position: Position?) =
+            if (position == null) "-" else String.format(Locale.US, "%.6f,%.6f", position.lat, position.lon)
+        fun m(v: Float) = if (v.isNaN()) "-" else String.format(Locale.US, "%.2f", v)
+        return "in aircraft=${p(input.aircraft)} alt=${m(input.altitude)} ref=${input.altitudeReference}" +
+                " takeoff=${p(input.takeoff)} antenna=${p(input.antenna)}" +
+                " | out agl=${m(state.heightAboveGround)} limit=${m(state.altitudeLimit)}" +
+                " los=${m(state.minLosAltitude)} above=${state.aboveLimit} below=${state.belowLos}" +
+                " obstacle=${p(state.losObstacle)} blocked=${state.losBlocked.size}" +
+                " ground=${m(state.groundElevation)} surface=${m(state.surfaceElevation)}"
     }
 }
