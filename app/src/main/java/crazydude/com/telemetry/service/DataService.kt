@@ -248,6 +248,16 @@ class DataService : Service(), DataDecoder.Listener {
         }
     }
 
+    /**
+     * Stops sending to this listener if it is the current one, and nothing else: for a screen
+     * which is replaced by a new one (rotation), which sets itself as the listener when it binds.
+     */
+    fun removeDataListener(dataListener: DataDecoder.Listener) {
+        if (this.dataListener === dataListener) {
+            this.dataListener = null
+        }
+    }
+
     fun isConnected(): Boolean {
         return dataPoller != null
     }

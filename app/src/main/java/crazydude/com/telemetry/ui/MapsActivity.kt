@@ -1691,12 +1691,18 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         ttsReady = false
         headingPolyline = null;
         polyLine = null;
+        homeLine = null
+        losBlockedLines.clear()
         flightPlanLines.clear()
         flightPlanLabels.clear()
         detachTerrain()
         map?.onDestroy()
         if (!isChangingConfigurations) {
             dataService?.setDataListener(null)
+        } else {
+            // The new screen sets itself as the listener once it is bound. Until then the data
+            // must not come here: this screen's map is gone (a crash in updateHomeLine)
+            dataService?.removeDataListener(this)
         }
         map = null;
         this.unregisterReceiver(this.batInfoReceiver)
