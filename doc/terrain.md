@@ -34,7 +34,13 @@ readout turns red. The readouts are ordinary sensors and can be moved or hidden 
   building layer (10 m). For every sample the
   altitude needed to look over it from the antenna is extrapolated to the aircraft position;
   the highest of them is the result. Earth curvature is included (4/3 Earth radius, as usual
-  for radio links); Fresnel zone clearance is not, use *Clearance above obstacles* for margin.
+  for radio links).
+* A radio link needs more than the bare straight line: with *Radio link frequency* (5.8 GHz by
+  default) every obstacle is raised by 60 % of the radius of the first Fresnel zone at its
+  place, `0.6 * sqrt(wavelength * d1 * d2 / (d1 + d2))`. That is about 6 m for an obstacle
+  2 km from the antenna on a 9 km link at 5.8 GHz and 14 m at 900 MHz. What the data cannot
+  tell is how much trees only weaken a signal instead of blocking it; *Clearance above
+  obstacles* adds a fixed margin on top.
 * Trees a few meters from the pilot would shade the whole horizon, so obstacles closer than
   *Ignore obstacles near the antenna* (50 m by default) are skipped.
 * The line of sight readout does not turn red while the aircraft is closer

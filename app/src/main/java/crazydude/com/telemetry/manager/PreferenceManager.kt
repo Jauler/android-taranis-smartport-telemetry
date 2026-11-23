@@ -291,6 +291,11 @@ class PreferenceManager(context: Context) {
         return getFloat("terrain_los_margin", 0f)
     }
 
+    /** Frequency of the radio link the line of sight is calculated for, MHz; 0: bare straight line. */
+    fun getTerrainLosFrequency(): Float {
+        return getFloat("terrain_los_frequency", 5800f)
+    }
+
     /** The line of sight readout does not turn red closer than this to the home point, meters. */
     fun getTerrainLosWarnMinDistance(): Float {
         return getFloat("terrain_los_warn_min_distance", 200f)

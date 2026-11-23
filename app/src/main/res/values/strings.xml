@@ -172,6 +172,20 @@
         <item>500</item>
     </string-array>
 
+    <string-array name="TerrainFrequencyEntries">
+        <item>5.8 GHz (video)</item>
+        <item>2.4 GHz</item>
+        <item>900 MHz</item>
+        <item>Not used (straight line only)</item>
+    </string-array>
+
+    <string-array name="TerrainFrequencyValues">
+        <item>5800</item>
+        <item>2400</item>
+        <item>900</item>
+        <item>0</item>
+    </string-array>
+
     <string-array name="TerrainMarginEntries">
         <item>None</item>
         <item>5 m</item>

@@ -136,7 +136,7 @@ class Reference:
                     return 1
         return 0
 
-    def line_of_sight(self, ax, ay, antenna_height, bx, by, ignore_near, margin):
+    def line_of_sight(self, ax, ay, antenna_height, bx, by, ignore_near, margin, wavelength=0.0):
         antenna_ground = self.ground(ax, ay)
         below = self.surface(bx, by)
         if math.isnan(antenna_ground) or math.isnan(below):
@@ -156,7 +156,9 @@ class Reference:
                 complete = False
                 continue
             bulge = d * (distance - d) / (2.0 * EFFECTIVE_EARTH_RADIUS)
-            needed = antenna + (top + margin + bulge - antenna) / t
+            # 60 % of the first Fresnel zone of a radio link of this wavelength
+            fresnel = 0.6 * math.sqrt(wavelength * d * (distance - d) / distance) if wavelength > 0 else 0.0
+            needed = antenna + (top + margin + fresnel + bulge - antenna) / t
             if needed > required:
                 required, obstacle_distance = needed, d
         return required, distance, obstacle_distance, complete
