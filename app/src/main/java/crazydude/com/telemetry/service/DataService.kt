@@ -27,6 +27,7 @@ import crazydude.com.telemetry.protocol.decoder.DataDecoder
 import crazydude.com.telemetry.protocol.pollers.DataPoller
 import crazydude.com.telemetry.protocol.pollers.FileDataPoller
 import crazydude.com.telemetry.protocol.pollers.UsbDataPoller
+import crazydude.com.telemetry.protocol.sniffer.SerialLink
 import crazydude.com.telemetry.ui.MapsActivity
 import java.io.File
 import java.io.FileOutputStream
@@ -260,6 +261,19 @@ class DataService : Service(), DataDecoder.Listener {
 
     fun isConnected(): Boolean {
         return dataPoller != null
+    }
+
+    /** The USB serial port of the current connection, to send commands to the receiver; null when not on USB. */
+    fun usbSerialLink(): SerialLink? {
+        return dataPoller as? UsbDataPoller
+    }
+
+    /**
+     * The sniffer receiver now follows another pilot's link: what comes next is another
+     * aircraft, the takeoff point of the last one does not apply to it.
+     */
+    fun onSnifferLinkChanged() {
+        mainHandler.post { terrainMonitor.reset() }
     }
 
     override fun onBind(intent: Intent): IBinder? {

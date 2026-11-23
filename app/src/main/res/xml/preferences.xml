@@ -204,6 +204,18 @@
             />
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="ELRS sniffer binding phrase">
+
+        <Preference
+                android:title="Binding phrases"
+                android:key="elrs_binding_phrases_manage"/>
+
+        <Preference
+                android:title="Apply binding phrase"
+                android:key="elrs_binding_phrase_apply"/>
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="Playback">
 
         <SwitchPreference

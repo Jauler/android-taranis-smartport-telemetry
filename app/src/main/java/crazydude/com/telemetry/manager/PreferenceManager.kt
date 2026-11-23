@@ -3,6 +3,8 @@ package crazydude.com.telemetry.manager
 import android.content.Context
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.maps.osm.OsmMapWrapper
+import org.json.JSONArray
+import org.json.JSONObject
 
 class PreferenceManager(context: Context) {
 
@@ -321,4 +323,36 @@ class PreferenceManager(context: Context) {
         return getFloat("terrain_los_warn_min_distance", 200f)
     }
 
+
+    // --- ELRS sniffer binding phrases ---
+
+    data class BindingPhrase(val name: String, val phrase: String)
+
+    fun getBindingPhrases(): List<BindingPhrase> {
+        val json = sharedPreferences.getString("elrs_binding_phrases", null) ?: return emptyList()
+        return try {
+            val array = JSONArray(json)
+            (0 until array.length()).map {
+                val item = array.getJSONObject(it)
+                BindingPhrase(item.getString("name"), item.getString("phrase"))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun setBindingPhrases(phrases: List<BindingPhrase>) {
+        val array = JSONArray()
+        phrases.forEach { array.put(JSONObject().put("name", it.name).put("phrase", it.phrase)) }
+        sharedPreferences.edit().putString("elrs_binding_phrases", array.toString()).apply()
+    }
+
+    /** The UID the sniffer receiver reported last, "1,2,3,4,5,6"; null if never applied. */
+    fun getAppliedBindingUid(): String? {
+        return sharedPreferences.getString("elrs_binding_applied_uid", null)
+    }
+
+    fun setAppliedBindingUid(uid: String) {
+        sharedPreferences.edit().putString("elrs_binding_applied_uid", uid).apply()
+    }
 }

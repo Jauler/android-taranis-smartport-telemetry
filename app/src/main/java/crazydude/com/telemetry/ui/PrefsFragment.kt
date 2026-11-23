@@ -1,15 +1,22 @@
 package crazydude.com.telemetry.ui
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.app.ProgressDialog
 import android.content.*
+import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceFragmentCompat
@@ -17,6 +24,12 @@ import crazydude.com.telemetry.R
 import crazydude.com.telemetry.manager.FlightPlanManager
 import crazydude.com.telemetry.manager.PreferenceManager
 import androidx.preference.ListPreference
+import com.hoho.android.usbserial.driver.UsbSerialProber
+import crazydude.com.telemetry.protocol.sniffer.SerialLink
+import crazydude.com.telemetry.protocol.sniffer.SnifferUid
+import crazydude.com.telemetry.protocol.sniffer.SnifferUidChanger
+import crazydude.com.telemetry.protocol.sniffer.UsbSerialLink
+import crazydude.com.telemetry.service.DataService
 import crazydude.com.telemetry.terrain.TerrainInstaller
 import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.utils.FileLogger
@@ -27,6 +40,20 @@ class PrefsFragment : PreferenceFragmentCompat() {
     companion object {
         private const val REQUEST_IMPORT_FLIGHT_PLAN = 100
         private const val REQUEST_INSTALL_TERRAIN = 101
+        private const val ACTION_USB_PERMISSION = "jauler.telemetry.USB_PERMISSION_BINDING_PHRASE"
+    }
+
+    /** The running data service, if any: its USB connection is used to apply a binding phrase. */
+    private var dataService: DataService? = null
+    private var serviceBound = false
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            dataService = (binder as DataService.DataBinder).getService()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            dataService = null
+        }
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -118,12 +145,307 @@ class PrefsFragment : PreferenceFragmentCompat() {
         }
         updateTerrainInfo()
 
+        findPreference("elrs_binding_phrases_manage").setOnPreferenceClickListener {
+            showBindingPhrasesDialog()
+            return@setOnPreferenceClickListener true
+        }
+        findPreference("elrs_binding_phrase_apply").setOnPreferenceClickListener {
+            showApplyBindingPhraseDialog()
+            return@setOnPreferenceClickListener true
+        }
+        updateBindingPhraseSummaries()
+
         updateSummary()
     }
 
     override fun onResume() {
         super.onResume()
         updateTerrainInfo()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // only if it runs already: not connected, the port is opened here
+        serviceBound = context!!.bindService(Intent(context, DataService::class.java), serviceConnection, 0)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (serviceBound) context?.unbindService(serviceConnection)
+        serviceBound = false
+        dataService = null
+    }
+
+    // --- ELRS sniffer binding phrases ---
+
+    private fun uidText(phrase: String): String = SnifferUid.format(SnifferUid.fromPhrase(phrase))
+
+    private fun updateBindingPhraseSummaries() {
+        val phrases = prefManager.getBindingPhrases()
+        findPreference("elrs_binding_phrases_manage").summary =
+            "Binding phrases of the pilots whose links the sniffer receiver can follow\n" +
+                    when (phrases.size) {
+                        0 -> "None saved yet. Tap to add one"
+                        1 -> "1 saved. Tap to add, edit or delete"
+                        else -> "${phrases.size} saved. Tap to add, edit or delete"
+                    }
+        val applied = prefManager.getAppliedBindingUid()
+        val current = when {
+            applied == null -> "Not applied from this phone yet"
+            else -> {
+                val name = phrases.firstOrNull { uidText(it.phrase) == applied }?.name
+                "Last applied: ${name ?: "a phrase not in the list"} (UID $applied)"
+            }
+        }
+        findPreference("elrs_binding_phrase_apply").summary =
+            "Switch the sniffer receiver on the USB serial port to another pilot's link, " +
+                    "without reflashing it\n$current"
+    }
+
+    private fun showBindingPhrasesDialog() {
+        val phrases = prefManager.getBindingPhrases()
+        val items = phrases.map { "${it.name}\nUID ${uidText(it.phrase)}" } + "Add a binding phrase"
+        AlertDialog.Builder(context!!)
+            .setTitle("Binding phrases")
+            .setItems(items.toTypedArray()) { _, which ->
+                if (which == phrases.size) editBindingPhrase(-1) else showBindingPhraseOptions(which)
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showBindingPhraseOptions(index: Int) {
+        val phrase = prefManager.getBindingPhrases().getOrNull(index) ?: return
+        AlertDialog.Builder(context!!)
+            .setTitle(phrase.name)
+            .setItems(arrayOf("Edit", "Delete")) { _, which ->
+                when (which) {
+                    0 -> editBindingPhrase(index)
+                    1 -> AlertDialog.Builder(context!!)
+                        .setTitle("Delete ${phrase.name}?")
+                        .setPositiveButton("Delete") { _, _ ->
+                            val phrases = prefManager.getBindingPhrases().toMutableList()
+                            if (index < phrases.size && phrases[index] == phrase) {
+                                phrases.removeAt(index)
+                                prefManager.setBindingPhrases(phrases)
+                            }
+                            updateBindingPhraseSummaries()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Adds a binding phrase ([index] -1) or edits the one at [index]. */
+    private fun editBindingPhrase(index: Int) {
+        val ctx = context!!
+        val existing = if (index >= 0) prefManager.getBindingPhrases().getOrNull(index) else null
+        val padding = (20 * resources.displayMetrics.density).toInt()
+        val layout = LinearLayout(ctx)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(padding, padding / 2, padding, 0)
+        val nameEdit = EditText(ctx)
+        nameEdit.hint = "Name, e.g. the pilot's"
+        nameEdit.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+        nameEdit.setText(existing?.name ?: "")
+        val phraseEdit = EditText(ctx)
+        phraseEdit.hint = "Binding phrase"
+        // no suggestions: the keyboard should not learn it
+        phraseEdit.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        phraseEdit.setText(existing?.phrase ?: "")
+        val uidView = TextView(ctx)
+        uidView.setPadding(padding / 4, padding / 4, 0, 0)
+        fun refreshUid() {
+            val text = phraseEdit.text.toString()
+            uidView.text = if (text.isBlank()) "UID: -" else "UID: ${uidText(text)}"
+        }
+        refreshUid()
+        phraseEdit.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) = refreshUid()
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+        layout.addView(nameEdit)
+        layout.addView(phraseEdit)
+        layout.addView(uidView)
+
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle(if (existing == null) "Add a binding phrase" else "Edit binding phrase")
+            .setView(layout)
+            .setPositiveButton("Save", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.setOnShowListener {
+            // checked here, so that a wrong entry keeps the dialog open
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameEdit.text.toString().trim()
+                val phrase = phraseEdit.text.toString().trim()
+                val error = when {
+                    name.isEmpty() -> "Enter a name"
+                    phrase.isEmpty() -> "Enter the binding phrase"
+                    !SnifferUid.isUsable(SnifferUid.fromPhrase(phrase)) -> "This UID is all zero, it cannot be used"
+                    else -> null
+                }
+                if (error != null) {
+                    Toast.makeText(ctx, error, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val phrases = prefManager.getBindingPhrases().toMutableList()
+                val entry = PreferenceManager.BindingPhrase(name, phrase)
+                if (existing != null && index < phrases.size && phrases[index] == existing) {
+                    phrases[index] = entry
+                } else {
+                    phrases.add(entry)
+                }
+                prefManager.setBindingPhrases(phrases)
+                updateBindingPhraseSummaries()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showApplyBindingPhraseDialog() {
+        val phrases = prefManager.getBindingPhrases()
+        if (phrases.isEmpty()) {
+            Toast.makeText(context, "Add a binding phrase first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val applied = prefManager.getAppliedBindingUid()
+        val items = phrases.map {
+            val uid = uidText(it.phrase)
+            "${it.name}${if (uid == applied) " (last applied)" else ""}\nUID $uid"
+        }
+        AlertDialog.Builder(context!!)
+            .setTitle("Apply binding phrase")
+            .setItems(items.toTypedArray()) { _, which -> applyBindingPhrase(phrases[which]) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Over the USB connection of the telemetry if there is one, otherwise the USB serial port is
+     * opened just for this.
+     */
+    private fun applyBindingPhrase(phrase: PreferenceManager.BindingPhrase) {
+        val service = dataService
+        val connectedLink = service?.usbSerialLink()
+        if (connectedLink != null) {
+            runBindingChange(phrase, connectedLink, null, service)
+            return
+        }
+        openUsbSerial { link -> runBindingChange(phrase, link, link, null) }
+    }
+
+    /** Opens the first USB serial port, asking for the permission first if needed. */
+    private fun openUsbSerial(onOpen: (UsbSerialLink) -> Unit) {
+        val ctx = context ?: return
+        val usbManager = ctx.getSystemService(Context.USB_SERVICE) as UsbManager
+        val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
+        val port = driver?.ports?.firstOrNull()
+        if (driver == null || port == null) {
+            Toast.makeText(ctx, "No USB serial adapter found. Plug in the adapter with the sniffer receiver",
+                Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!usbManager.hasPermission(driver.device)) {
+            val appContext = ctx.applicationContext
+            appContext.registerReceiver(object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    appContext.unregisterReceiver(this)
+                    if (!isAdded) return
+                    if (intent?.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) == true) {
+                        openUsbSerial(onOpen)
+                    } else {
+                        Toast.makeText(appContext, "The USB permission is needed to talk to the receiver",
+                            Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }, IntentFilter(ACTION_USB_PERMISSION))
+            usbManager.requestPermission(driver.device, PendingIntent.getBroadcast(ctx, 0, Intent(ACTION_USB_PERMISSION), 0))
+            return
+        }
+        val link = try {
+            val connection = usbManager.openDevice(driver.device) ?: throw java.io.IOException("cannot open the device")
+            UsbSerialLink(port, connection, prefManager.getUsbSerialBaudrate())
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "Cannot open the USB serial port: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
+        onOpen(link)
+    }
+
+    private fun runBindingChange(
+        phrase: PreferenceManager.BindingPhrase,
+        link: SerialLink,
+        toClose: UsbSerialLink?,
+        service: DataService?
+    ) {
+        val ctx = context ?: return
+        val appContext = ctx.applicationContext
+        val uid = SnifferUid.fromPhrase(phrase.phrase)
+        val dialog = ProgressDialog(ctx)
+        dialog.setCancelable(false)
+        dialog.setMessage("Switching the sniffer receiver to ${phrase.name}")
+        dialog.show()
+        Thread {
+            val result = try {
+                SnifferUidChanger(link).apply(uid)
+            } catch (e: Exception) {
+                SnifferUidChanger.Result.Failed("Cannot talk to the receiver: ${e.message}")
+            } finally {
+                toClose?.close()
+            }
+            handler.post {
+                try {
+                    dialog.dismiss()
+                } catch (e: Exception) {
+                }
+                when (result) {
+                    is SnifferUidChanger.Result.Done -> prefManager.setAppliedBindingUid(SnifferUid.format(result.uid))
+                    is SnifferUidChanger.Result.Refused -> prefManager.setAppliedBindingUid(SnifferUid.format(result.uid))
+                    else -> {}
+                }
+                // another pilot: another aircraft, which has not taken off where the last one did
+                if (result is SnifferUidChanger.Result.Done && result.changed) service?.onSnifferLinkChanged()
+                if (!isAdded) {
+                    Toast.makeText(appContext, bindingResultMessage(phrase, result), Toast.LENGTH_LONG).show()
+                    return@post
+                }
+                updateBindingPhraseSummaries()
+                AlertDialog.Builder(context!!)
+                    .setTitle(if (result is SnifferUidChanger.Result.Done) phrase.name else "Binding phrase not applied")
+                    .setMessage(bindingResultMessage(phrase, result))
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }.start()
+    }
+
+    private fun bindingResultMessage(phrase: PreferenceManager.BindingPhrase, result: SnifferUidChanger.Result): String {
+        return when (result) {
+            is SnifferUidChanger.Result.Done ->
+                if (result.changed) {
+                    "The sniffer receiver switched to ${phrase.name} (UID ${SnifferUid.format(result.uid)}) and " +
+                            "is looking for that link. The telemetry comes once the pilot's radio and the " +
+                            "aircraft are on, usually within a few seconds."
+                } else {
+                    "The sniffer receiver already follows ${phrase.name} (UID ${SnifferUid.format(result.uid)})."
+                }
+            is SnifferUidChanger.Result.Refused ->
+                "The sniffer receiver refused the change and still uses UID ${SnifferUid.format(result.uid)}. " +
+                        "It does so while it is in WiFi or firmware update mode."
+            is SnifferUidChanger.Result.NoReply ->
+                "The sniffer receiver does not answer. Check the wire from the adapter's TX to the receiver's " +
+                        "RX, the USB serial baudrate (${prefManager.getUsbSerialBaudrate()}, the receiver's is " +
+                        "usually 420000), and that the receiver runs sniffer firmware which can change the " +
+                        "binding phrase."
+            is SnifferUidChanger.Result.Failed -> result.message
+        }
     }
 
     private fun formatNumber(value: Float): String {
