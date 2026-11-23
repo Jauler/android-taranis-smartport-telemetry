@@ -18,13 +18,11 @@ class TakeoffTrackerTest {
     fun followsWhileDisarmedAndStaysWhereArmed() {
         val t = TakeoffTracker()
         t.onArmedState(false)
-        t.onAltitude(0f)
-        t.onAircraftPosition(field, true)
-        t.onAircraftPosition(runway, true)
+        t.onAircraftPosition(field)
+        t.onAircraftPosition(runway)
         assertEquals(runway, t.takeoff)
         t.onArmedState(true)
-        t.onAltitude(80f)
-        t.onAircraftPosition(inFlight, true)
+        t.onAircraftPosition(inFlight)
         assertEquals(runway, t.takeoff)
         assertEquals(inFlight, t.aircraft)
     }
@@ -33,50 +31,27 @@ class TakeoffTrackerTest {
     fun disarmingMovesItToTheLandingPoint() {
         val t = TakeoffTracker()
         t.onArmedState(true)
-        t.onAltitude(0f)
-        t.onAircraftPosition(field, true)
-        t.onAltitude(50f)
-        t.onAircraftPosition(farAway, true)
+        t.onAircraftPosition(field)
+        t.onAircraftPosition(farAway)
         assertEquals(field, t.takeoff)
         t.onArmedState(false)
         assertEquals(farAway, t.takeoff)
     }
 
     @Test
-    fun unknownArmedStateTakesTheFirstPositionOnTheGround() {
+    fun unknownArmedStateTakesTheFirstPosition() {
         val t = TakeoffTracker()
-        t.onAltitude(0.5f)
-        t.onAircraftPosition(field, true)
-        t.onAltitude(60f)
-        t.onAircraftPosition(inFlight, true)
+        t.onAircraftPosition(field)
+        t.onAircraftPosition(inFlight)
         assertEquals(field, t.takeoff)
     }
 
     @Test
-    fun noTakeoffPointPickedUpInTheAir() {
-        // the application or the connection started while the aircraft is flying
+    fun altitudeIsKept() {
         val t = TakeoffTracker()
-        t.onArmedState(true)
-        t.onAltitude(120f)
-        t.onAircraftPosition(inFlight, true)
-        assertNull(t.takeoff)
-        // ... and still nothing while the altitude is unknown
-        val u = TakeoffTracker()
-        u.onAircraftPosition(inFlight, true)
-        assertNull(u.takeoff)
-        // once it is back on the ground, it is
-        t.onAltitude(1f)
-        t.onAircraftPosition(field, true)
-        assertEquals(field, t.takeoff)
-    }
-
-    @Test
-    fun altitudeAboveSeaLevelTellsNothingAboutTheGround() {
-        val t = TakeoffTracker()
-        t.onArmedState(true)
-        t.onAltitude(166f)
-        t.onAircraftPosition(field, false)
-        assertEquals(field, t.takeoff)
+        assertTrue(t.altitude.isNaN())
+        t.onAltitude(42f)
+        assertEquals(42f, t.altitude, 0f)
     }
 
     @Test
@@ -84,9 +59,9 @@ class TakeoffTrackerTest {
         val t = TakeoffTracker()
         assertFalse(t.setTakeoffHere())
         t.onArmedState(false)
-        t.onAircraftPosition(runway, true)
+        t.onAircraftPosition(runway)
         assertTrue(t.setTakeoffHere())
-        t.onAircraftPosition(farAway, true)
+        t.onAircraftPosition(farAway)
         t.onArmedState(true)
         t.onArmedState(false)
         assertEquals(runway, t.takeoff)
@@ -101,13 +76,11 @@ class TakeoffTrackerTest {
     @Test
     fun resetForgetsTheArmedState() {
         val t = TakeoffTracker()
-        t.onArmedState(true)
+        t.onArmedState(false)
         t.reset()
-        // armed state unknown again: the first position on the ground is taken
-        t.onAltitude(0f)
-        t.onAircraftPosition(field, true)
-        t.onAltitude(30f)
-        t.onAircraftPosition(inFlight, true)
+        // armed state unknown again: the first position is kept, not followed
+        t.onAircraftPosition(field)
+        t.onAircraftPosition(inFlight)
         assertEquals(field, t.takeoff)
     }
 }

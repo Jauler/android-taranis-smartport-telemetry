@@ -23,9 +23,7 @@ marked in red (only while the home line is shown). The readouts are ordinary sen
 
 * The altitude sensor normally reports the height above the takeoff point. The application
   takes the position of the aircraft at the moment of arming as the takeoff point (the first
-  position on the ground, with the altitude close to zero, if the armed state is unknown) and
-  looks up the ground elevation there. It never takes one in the air: after the application
-  or the connection was started in flight, the height readouts stay empty rather than wrong.
+  received position if the armed state is unknown) and looks up the ground elevation there.
   The takeoff point is kept for the whole flight, also when the screen is rotated or closed
   and when the link is lost and found again; connecting from the application or starting a
   replay begins a new one. *Set takeoff point at UAV location* in the map menu overrides it.

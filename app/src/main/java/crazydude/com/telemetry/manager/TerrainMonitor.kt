@@ -32,7 +32,7 @@ import java.util.Locale
  * Altitudes reported by the flight controller are normally relative to the takeoff point, so
  * the monitor tracks that point itself ([TakeoffTracker]): it follows the aircraft while it is
  * disarmed and is frozen once it is armed. If the armed state is not known, the first position
- * on the ground (altitude close to zero) is used; none is taken in the air.
+ * received is used.
  *
  * Some setups (e.g. Betaflight over CRSF) report the altitude above sea level instead; the user
  * picks which one in the settings (height above the takeoff point by default).
@@ -166,8 +166,7 @@ class TerrainMonitor(
 
     fun onAircraftPosition(lat: Double, lon: Double) {
         if (lat == 0.0 && lon == 0.0) return
-        val relative = preferenceManager.getTerrainAltitudeReference() != REFERENCE_MSL
-        tracker.onAircraftPosition(Position(lat, lon), relative)
+        tracker.onAircraftPosition(Position(lat, lon))
         requestUpdate()
     }
 
