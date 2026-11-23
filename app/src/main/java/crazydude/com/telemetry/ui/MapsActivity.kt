@@ -158,6 +158,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     // red marks on the home line where the line of sight to the aircraft is obstructed
     private val losBlockedLines = ArrayList<MapLine>()
     private var losBlockedShown: List<TerrainMonitor.Segment> = emptyList()
+    // the last obstructed stretches reported by the terrain monitor, drawn or not
+    private var losBlocked: List<TerrainMonitor.Segment> = emptyList()
     private lateinit var terrainMonitor: TerrainMonitor
     private var terrainSignature = ""
     private val phoneLocationListener = object : LocationListener {
@@ -614,8 +616,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         homeLine = map?.addPolyline(2f, preferenceManager.getHomeLineColor())
         drawFlightPlans()
         showMyLocation()
-        // the marks on the home line went with the old map
-        terrainMonitor.requestUpdate()
+        // the home line and its marks went with the old map
+        updateHomeLine()
     }
 
     private fun updateCompassHeading(orientation: Float) {
@@ -657,6 +659,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     private fun updateHomeLine() {
+        updateHomeLinePoints()
+        // the marks on it follow the line: hidden with it, back with it
+        showLosBlocked()
+    }
+
+    private fun updateHomeLinePoints() {
         val line = homeLine ?: return
         line.color = preferenceManager.getHomeLineColor()
         if (!preferenceManager.isHomeLineEnabled()) {
@@ -2324,6 +2332,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         lastGPS = Position(0.0, 0.0)
         replayHomeGPS = null
         homeLine?.clear()
+        showLosBlocked()
         map?.invalidate()
     }
 
@@ -3024,12 +3033,13 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     // --- Terrain: height above ground, altitude limit, line of sight ---
 
     /**
-     * Where the receiving antenna is: at the phone. A replayed log does not tell where the phone
-     * was during the flight and the phone may be anywhere now, so the takeoff point is used then
-     * (the terrain monitor falls back to it when there is no antenna position).
+     * Where the receiving antenna is: at the phone, the home end of the home line. A replayed log
+     * does not tell where the phone was during the flight and the phone may be anywhere now, so
+     * the home of the replay (where the flight started) is used then, again the end of the home
+     * line. Without it the terrain monitor falls back to its takeoff point.
      */
     private fun antennaPosition(): Position? {
-        return if (isInReplayMode()) null else map?.getMyLocation()
+        return if (isInReplayMode()) replayHomeGPS else map?.getMyLocation()
     }
 
     /** "Sensor size" of the settings: the text and icons of both sensor bars. */
@@ -3045,6 +3055,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         terrainSignature = signature
         terrainMonitor.destroy()
         terrainMonitor = TerrainMonitor(applicationContext, preferenceManager, this)
+        // the new monitor reports nothing until it has something to say, and nothing at all
+        // without terrain data: the marks of the old one must not stay
+        losBlocked = emptyList()
+        showLosBlocked()
         updateSensorsPlacement()
     }
 
@@ -3070,15 +3084,18 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         surfaceElevation.text = formatTerrainHeight(state.surfaceElevation)
         minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
         minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
-        showLosBlocked(state.losBlocked)
+        losBlocked = state.losBlocked
+        showLosBlocked()
     }
 
     /**
      * Marks in red the stretches of the home line (the straight line from the pilot to the
-     * aircraft) where the line of sight is obstructed. Nothing is drawn without the home line.
+     * aircraft) where the line of sight is obstructed. Nothing is drawn while the home line is
+     * not: switched off, or without a home position.
      */
-    private fun showLosBlocked(segments: List<TerrainMonitor.Segment>) {
-        val wanted = if (preferenceManager.isHomeLineEnabled()) segments else emptyList()
+    private fun showLosBlocked() {
+        val homeShown = preferenceManager.isHomeLineEnabled() && (homeLine?.size ?: 0) > 0
+        val wanted = if (homeShown) losBlocked else emptyList()
         if (wanted == losBlockedShown) return
         losBlockedShown = wanted
         losBlockedLines.forEach { it.remove() }

@@ -15,7 +15,8 @@ With a terrain pack present the application shows:
 | Min line of sight altitude | The lowest altitude, as shown by the altitude sensor, at which nothing (ground, trees, buildings) stands between the aircraft and the receiving antenna. |
 
 Above the height limit the two height readouts turn red. Below the line of sight altitude that
-readout turns red. The readouts are ordinary sensors and can be moved or hidden in
+readout turns red, and the stretches of the home line where the line of sight is obstructed are
+marked in red (only while the home line is shown). The readouts are ordinary sensors and can be moved or hidden in
 *Settings > Sensor display settings*. Without a terrain pack they are hidden.
 
 ## How the values are calculated
@@ -26,9 +27,9 @@ readout turns red. The readouts are ordinary sensors and can be moved or hidden 
   *Set takeoff point at UAV location* in the map menu overrides it. Some flight controllers
   report altitude above sea level instead (e.g. Betaflight over CRSF); switch
   *Settings > Terrain > Altitude sensor shows* to *Altitude above sea level* for those.
-* The receiving antenna is assumed to be where the phone is (where the aircraft took off if
-  the phone has no location fix, and always when a log is replayed, as the phone may be
-  anywhere by then), at *Receiving antenna height above ground* (set it to the height of a
+* The receiving antenna is assumed to be where the phone is, the home end of the home line
+  (where the aircraft took off if the phone has no location fix; when a log is replayed, where
+  the recorded track starts, as the phone may be anywhere by then), at *Receiving antenna height above ground* (set it to the height of a
   repeater above the pilot when one is used).
 * The line between the antenna and the aircraft is sampled every half cell of the tree and
   building layer (10 m). For every sample the

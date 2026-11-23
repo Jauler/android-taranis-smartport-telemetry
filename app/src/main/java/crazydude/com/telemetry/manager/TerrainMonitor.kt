@@ -50,7 +50,11 @@ class TerrainMonitor(
         val belowLos: Boolean,
         /** Where the obstacle defining [minLosAltitude] is, null if unknown. */
         val losObstacle: Position?,
-        /** Pieces of the line from the antenna to the aircraft which are obstructed now; empty unless [belowLos]. */
+        /**
+         * Pieces of the line from the antenna (as given to [onAntennaPosition]) to the aircraft
+         * which are obstructed now; empty unless [belowLos], and when the line had to be taken
+         * from the takeoff point instead.
+         */
         val losBlocked: List<Segment>,
         /** Elevation above sea level of the ground below the aircraft, NaN if unknown. */
         val groundElevation: Float,
@@ -261,20 +265,26 @@ class TerrainMonitor(
             // The antenna is where the phone is. Without a usable phone position (no fix, or a
             // position outside of the terrain data) it is assumed to be at the takeoff point.
             var los: TerrainModel.LineOfSight? = null
+            var fromAntenna = false
             for (antenna in listOf(input.antenna, input.takeoff)) {
                 if (antenna == null || los != null) continue
                 los = terrain.minLineOfSightAltitude(
                     antenna.lat, antenna.lon, input.antennaHeight,
                     lat, lon, input.ignoreNear, input.margin, input.wavelength, altitudeAboveSeaLevel
                 )
+                fromAntenna = los != null && antenna === input.antenna
             }
             if (los != null) {
                 minLosAltitude = (los.minAltitude - reference).toFloat()
                 if (los.obstacleDistance < los.distance - 1.0) {
                     obstacle = Position(los.obstacleLat, los.obstacleLon)
                 }
-                blocked = los.blocked.map {
-                    Segment(Position(it.fromLat, it.fromLon), Position(it.toLat, it.toLon))
+                // Shown on the map along the line from the antenna; a line from the takeoff
+                // point instead would not be on anything drawn there
+                if (fromAntenna) {
+                    blocked = los.blocked.map {
+                        Segment(Position(it.fromLat, it.fromLon), Position(it.toLat, it.toLon))
+                    }
                 }
             }
         }
