@@ -117,7 +117,8 @@ class DataService : Service(), DataDecoder.Listener {
      *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd drop
      *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd reconnect
      *
-     * connect starts the log from its beginning (like connecting from the app), drop loses the
+     * connect starts the log from its beginning, or from --ei from <percent> (like connecting
+     * from the app, to an aircraft on the ground or in flight), drop loses the
      * link like a radio going out of range, reconnect continues where drop left off (like the
      * automatic reconnection). duration is the time to play the whole file in, in seconds.
      */
@@ -130,7 +131,9 @@ class DataService : Service(), DataDecoder.Listener {
                 dataPoller?.disconnect()
                 logListener = null
                 terrainMonitor.reset()
-                dataPoller = FileDataPoller(this, debugFile!!, 0L, debugDurationMs)
+                // "from": percent of the file to start at, like connecting to an aircraft in flight
+                val from = debugFile!!.length() * intent.getIntExtra("from", 0) / 100
+                dataPoller = FileDataPoller(this, debugFile!!, from, debugDurationMs)
             }
             "drop" -> {
                 val poller = dataPoller as? FileDataPoller ?: return
