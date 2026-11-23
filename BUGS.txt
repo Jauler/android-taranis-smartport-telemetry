@@ -2,41 +2,31 @@ Known bugs
 ==========
 
 
-1. Takeoff point is lost on reconnect, decoder restart or screen rotation mid-flight
------------------------------------------------------------------------------------
+1. The terrain pack is opened on the UI thread
+----------------------------------------------
 
-Area: terrain readouts (height above ground, altitude limit)
-Files: manager/TerrainMonitor.kt, ui/MapsActivity.kt
+Area: Settings > Terrain > Terrain data, terrain readouts
+Files: ui/PrefsFragment.kt, manager/TerrainMonitor.kt, terrain/TerrainPack.kt
 
 What happens:
-  The height above ground is computed relative to the ground at the takeoff
-  point. When, during a flight, the telemetry link drops and reconnects, the
-  decoder restarts, a replay is seeked, or the screen is rotated, the takeoff
-  point is forgotten and the next GPS position, taken while the aircraft is in
-  the air, becomes the new takeoff point. A takeoff point set by hand ("Set
-  takeoff point at UAV location") is lost as well.
+  Opening a terrain pack reads its header and the complete tile index of
+  every layer, and this happens on the UI thread:
+  - PrefsFragment.updateTerrainInfo() opens the pack with TerrainLoader.open()
+    only to show its description in the summary, and closes it again. It
+    runs when the settings are created, on every onResume() and after each
+    install or removal.
+  - TerrainMonitor opens it when the data service starts, and again in
+    reloadIfChanged() when the map screen comes back from the settings with
+    another pack installed.
 
-Why:
-  - onConnected() and onDecoderRestart() in MapsActivity call
-    terrainMonitor.reset(), which clears `takeoff` and `takeoffLocked`.
-  - TerrainMonitor lives in the Activity and is created in onCreate(), so a
-    rotation (no configChanges in the manifest) starts a fresh monitor with
-    no takeoff point. DataService keeps the connection and the track, but
-    onServiceConnected() does not hand the track's first point to the new
-    monitor.
-
-Example:
-  Takeoff from a field at 100 m above sea level. The aircraft flies at 100 m
-  (relative) over a hill whose ground is at 160 m, then the link drops and
-  comes back. The hilltop becomes the takeoff point:
-    shown AGL = 100 + 160 - 160 = 100 m, true AGL = 100 + 100 - 160 = 40 m.
-  Back over the valley (ground 60 m) it shows 200 m: a false "height limit
-  exceeded". Over lower ground the error goes the other way and the limit
-  warning is suppressed.
+Effect:
+  Small for the pack of Lithuania (145 x 111 tiles, about 64 KB of index for
+  three layers), but it is disk I/O on the UI thread, and the cost grows with
+  the pack: the format allows up to 16M tiles per layer (64 MB of index).
+  On slow or broken external storage (the /sdcard FUSE problems seen on the
+  tablet) the read can block and freeze the screen.
 
 Suggested fix:
-  Keep the takeoff point (and the manual lock) for the whole session: across
-  reconnects, decoder restarts and activity recreation, e.g. hold it in
-  DataService or seed a new monitor from dataService.points.first() and the
-  armed state in onServiceConnected(). Clear it only when a new session starts
-  (idle state, new replay).
+  Read only the header for the description (a TerrainPack.readDescription()
+  that does not load the layer indexes), and open the pack for the monitor on
+  its worker thread, publishing it to the UI thread when it is ready.

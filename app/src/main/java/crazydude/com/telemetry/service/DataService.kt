@@ -4,8 +4,10 @@ import android.Manifest
 import android.annotation.TargetApi
 import android.app.*
 import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbDeviceConnection
 import android.os.*
@@ -13,14 +15,17 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.hoho.android.usbserial.driver.UsbSerialPort
+import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.logger.OtxCsvLogger
 import crazydude.com.telemetry.manager.PreferenceManager
+import crazydude.com.telemetry.manager.TerrainMonitor
 import crazydude.com.telemetry.maps.Position
 import crazydude.com.telemetry.protocol.pollers.BluetoothDataPoller
 import crazydude.com.telemetry.protocol.pollers.BluetoothLeDataPoller
 import crazydude.com.telemetry.protocol.decoder.DataDecoder
 import crazydude.com.telemetry.protocol.pollers.DataPoller
+import crazydude.com.telemetry.protocol.pollers.FileDataPoller
 import crazydude.com.telemetry.protocol.pollers.UsbDataPoller
 import crazydude.com.telemetry.ui.MapsActivity
 import java.io.File
@@ -46,13 +51,27 @@ class DataService : Service(), DataDecoder.Listener {
     private var lastSpeed: Float = 0.0f
     private var lastHeading: Float = 0.0f
     private lateinit var preferenceManager: PreferenceManager
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Terrain readouts of the live flight, as long as the service lives (not just the map
+     * screen). Called on the main thread only. The map screen also feeds it the antenna
+     * position, and replayed flights (replay does not go through the service).
+     */
+    lateinit var terrainMonitor: TerrainMonitor
+        private set
     val points: ArrayList<Position> = ArrayList()
     private var notification: Notification? = null
+    private var debugReceiver: BroadcastReceiver? = null
+    private var debugFile: File? = null
+    private var debugPosition = 0L
+    private var debugDurationMs = 0L
 
     override fun onCreate() {
         super.onCreate()
 
         preferenceManager = PreferenceManager(this)
+        terrainMonitor = TerrainMonitor(applicationContext, preferenceManager)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val importance = NotificationManager.IMPORTANCE_LOW
@@ -77,6 +96,56 @@ class DataService : Service(), DataDecoder.Listener {
             )
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .build()
+
+        if (BuildConfig.DEBUG) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    onDebugCommand(intent)
+                }
+            }
+            registerReceiver(receiver, IntentFilter(DEBUG_ACTION))
+            debugReceiver = receiver
+        }
+    }
+
+    /**
+     * Debug builds only: a live connection played from a recorded log, to test everything behind
+     * the connection without a radio.
+     *
+     *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd connect \
+     *         --es file "2026-11-02 15-57-26.tlm" --ei duration 120
+     *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd drop
+     *     adb shell am broadcast -a jauler.telemetry.debug.LINK --es cmd reconnect
+     *
+     * connect starts the log from its beginning, or from --ei from <percent> (like connecting
+     * from the app, to an aircraft on the ground or in flight), drop loses the
+     * link like a radio going out of range, reconnect continues where drop left off (like the
+     * automatic reconnection). duration is the time to play the whole file in, in seconds.
+     */
+    private fun onDebugCommand(intent: Intent) {
+        when (intent.getStringExtra("cmd")) {
+            "connect" -> {
+                val name = intent.getStringExtra("file") ?: return
+                debugFile = File(Environment.getExternalStoragePublicDirectory("TelemetryLogs"), name)
+                debugDurationMs = intent.getIntExtra("duration", 120) * 1000L
+                dataPoller?.disconnect()
+                logListener = null
+                terrainMonitor.reset()
+                // "from": percent of the file to start at, like connecting to an aircraft in flight
+                val from = debugFile!!.length() * intent.getIntExtra("from", 0) / 100
+                dataPoller = FileDataPoller(this, debugFile!!, from, debugDurationMs)
+            }
+            "drop" -> {
+                val poller = dataPoller as? FileDataPoller ?: return
+                debugPosition = poller.position
+                poller.disconnect()
+            }
+            "reconnect" -> {
+                val file = debugFile ?: return
+                if (dataPoller != null) return
+                dataPoller = FileDataPoller(this, file, debugPosition, debugDurationMs)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -89,8 +158,13 @@ class DataService : Service(), DataDecoder.Listener {
         fun getService(): DataService = this@DataService
     }
 
+    /**
+     * @param newSession false when the link is found again after it was lost (automatic
+     * reconnection): the flight goes on, what is known about it (the takeoff point) is kept
+     */
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
-    fun connect(device: BluetoothDevice, isBle: Boolean) {
+    fun connect(device: BluetoothDevice, isBle: Boolean, newSession: Boolean = true) {
+        if (newSession) terrainMonitor.reset()
         try {
             dataPoller?.disconnect()
 
@@ -140,6 +214,7 @@ class DataService : Service(), DataDecoder.Listener {
     }
 
     fun connect(serialPort: UsbSerialPort, connection: UsbDeviceConnection) {
+        terrainMonitor.reset()
         val logFile = createLogFile()
         createLogger()
         dataPoller = UsbDataPoller(
@@ -173,6 +248,16 @@ class DataService : Service(), DataDecoder.Listener {
         }
     }
 
+    /**
+     * Stops sending to this listener if it is the current one, and nothing else: for a screen
+     * which is replaced by a new one (rotation), which sets itself as the listener when it binds.
+     */
+    fun removeDataListener(dataListener: DataDecoder.Listener) {
+        if (this.dataListener === dataListener) {
+            this.dataListener = null
+        }
+    }
+
     fun isConnected(): Boolean {
         return dataPoller != null
     }
@@ -183,6 +268,9 @@ class DataService : Service(), DataDecoder.Listener {
 
     override fun onDestroy() {
         super.onDestroy()
+        terrainMonitor.destroy()
+        debugReceiver?.let { unregisterReceiver(it) }
+        debugReceiver = null
         dataPoller?.disconnect()
         dataPoller = null
     }
@@ -211,6 +299,7 @@ class DataService : Service(), DataDecoder.Listener {
         }
         lastLatitude = latitude
         lastLongitude = longitude
+        mainHandler.post { terrainMonitor.onAircraftPosition(latitude, longitude) }
         dataListener?.onGPSData(latitude, longitude)
         logListener?.onGPSData(latitude, longitude)
     }
@@ -321,6 +410,7 @@ class DataService : Service(), DataDecoder.Listener {
 
     override fun onAltitudeData(altitude: Float) {
         lastAltitude = altitude
+        mainHandler.post { terrainMonitor.onAltitude(altitude) }
         dataListener?.onAltitudeData(altitude)
         logListener?.onAltitudeData(altitude)
     }
@@ -358,6 +448,7 @@ class DataService : Service(), DataDecoder.Listener {
         secondFlightMode: DataDecoder.Companion.FlyMode?
     ) {
         isArmed = armed
+        mainHandler.post { terrainMonitor.onArmedState(armed) }
         dataListener?.onFlyModeData(armed, heading, firstFlightMode, secondFlightMode)
         logListener?.onFlyModeData(armed, heading, firstFlightMode, secondFlightMode)
     }
@@ -413,5 +504,9 @@ class DataService : Service(), DataDecoder.Listener {
         dataPoller = null
         satellites = 0
         hasGPSFix = false
+    }
+
+    companion object {
+        const val DEBUG_ACTION = "jauler.telemetry.debug.LINK"
     }
 }

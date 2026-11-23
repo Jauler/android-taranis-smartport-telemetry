@@ -6,9 +6,11 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.util.Log
+import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.maps.Position
 import crazydude.com.telemetry.terrain.TerrainLoader
 import crazydude.com.telemetry.terrain.TerrainModel
+import java.util.Locale
 
 /**
  * Keeps the terrain related readouts up to date while the aircraft moves:
@@ -21,18 +23,23 @@ import crazydude.com.telemetry.terrain.TerrainModel
  * Inputs are fed from the UI thread, the terrain lookups run on a worker thread and the
  * resulting [State] is delivered back on the UI thread.
  *
+ * It lives in the data service, as long as the connection: what it knows about the flight (the
+ * takeoff point above all) survives the map screen being recreated (rotation), going to the
+ * background, and the link being lost and found again. A new flight session starts with
+ * [reset]. While no [listener] is set nobody looks at the readouts: the inputs are still
+ * followed, but nothing is computed until a listener is set again.
+ *
  * Altitudes reported by the flight controller are normally relative to the takeoff point, so
- * the monitor tracks that point itself: it follows the aircraft while it is disarmed and is
- * frozen once it is armed. If the armed state is not known, the first position received is
- * used.
+ * the monitor tracks that point itself ([TakeoffTracker]): it follows the aircraft while it is
+ * disarmed and is frozen once it is armed. If the armed state is not known, the first position
+ * received is used.
  *
  * Some setups (e.g. Betaflight over CRSF) report the altitude above sea level instead; the user
  * picks which one in the settings (height above the takeoff point by default).
  */
 class TerrainMonitor(
-    context: Context,
-    private val preferenceManager: PreferenceManager,
-    private val listener: Listener
+    private val context: Context,
+    private val preferenceManager: PreferenceManager
 ) {
 
     interface Listener {
@@ -67,30 +74,27 @@ class TerrainMonitor(
 
     companion object {
         private const val TAG = "Terrain"
+        /** Debug builds log every computed state under this tag, see [describe]. */
+        private const val STATE_TAG = "TerrainState"
         private const val MIN_UPDATE_INTERVAL_MS = 400L
         const val REFERENCE_TAKEOFF = "takeoff"
         const val REFERENCE_MSL = "msl"
+
+        /** Nothing known. */
+        val EMPTY_STATE = State(Float.NaN, Float.NaN, Float.NaN, false, false, null, emptyList(), Float.NaN, Float.NaN)
     }
 
-    private val model: TerrainModel? = try {
-        TerrainLoader.open(context)
-    } catch (e: Exception) {
-        Log.w(TAG, "Terrain data is not usable", e)
-        null
-    }
+    private var signature = TerrainLoader.signature(context)
+    private var model: TerrainModel? = open()
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var thread: HandlerThread? = null
-    private var worker: Handler? = null
+    private var thread: HandlerThread? = HandlerThread("terrain").also { it.start() }
+    private var worker: Handler? = Handler(thread!!.looper)
     private var updateScheduled = false
     private var lastUpdateTime = 0L
     private var generation = 0
 
-    private var aircraft: Position? = null
-    private var altitude = Float.NaN
-    private var takeoff: Position? = null
-    private var takeoffLocked = false
-    private var disarmed = false
+    private val tracker = TakeoffTracker()
     private var antenna: Position? = null
 
     val isAvailable: Boolean
@@ -101,37 +105,78 @@ class TerrainMonitor(
         get() = model?.description
 
     val takeoffPosition: Position?
-        get() = takeoff
+        get() = tracker.takeoff
 
-    init {
-        if (model != null) {
-            val t = HandlerThread("terrain")
-            t.start()
-            thread = t
-            worker = Handler(t.looper)
+    /** The last state delivered, for a listener which comes later. */
+    private var lastState: State? = null
+
+    /**
+     * Who gets the states (the map screen); null while nobody shows them. A new listener gets
+     * the last state right away and a fresh one shortly after.
+     */
+    var listener: Listener? = null
+        set(value) {
+            field = value
+            if (value != null) {
+                lastState?.let { value.onTerrainState(it) }
+                requestUpdate()
+            }
         }
+
+    private fun open(): TerrainModel? {
+        return try {
+            TerrainLoader.open(context)
+        } catch (e: Exception) {
+            Log.w(TAG, "Terrain data is not usable", e)
+            null
+        }
+    }
+
+    /**
+     * Opens the terrain data again if it has been installed, replaced or removed (in the
+     * settings) since it was opened. The flight is not forgotten.
+     * @return true if it has changed
+     */
+    fun reloadIfChanged(): Boolean {
+        val current = TerrainLoader.signature(context)
+        if (current == signature) return false
+        signature = current
+        val old = model
+        model = open()
+        generation++
+        // closed on the worker thread, after whatever it is still computing with it
+        worker?.post { close(old) }
+        deliver(EMPTY_STATE)
+        requestUpdate()
+        return true
+    }
+
+    private fun close(terrain: TerrainModel?) {
+        try {
+            terrain?.close()
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot close the terrain data", e)
+        }
+    }
+
+    private fun deliver(state: State) {
+        lastState = state
+        listener?.onTerrainState(state)
     }
 
     fun onAircraftPosition(lat: Double, lon: Double) {
         if (lat == 0.0 && lon == 0.0) return
-        val position = Position(lat, lon)
-        aircraft = position
-        if (!takeoffLocked && (takeoff == null || disarmed)) {
-            takeoff = position
-        }
+        tracker.onAircraftPosition(Position(lat, lon))
         requestUpdate()
     }
 
     fun onAltitude(altitude: Float) {
-        this.altitude = altitude
+        tracker.onAltitude(altitude)
         requestUpdate()
     }
 
     fun onArmedState(armed: Boolean) {
-        disarmed = !armed
-        if (disarmed && !takeoffLocked) {
-            aircraft?.let { takeoff = it }
-        }
+        tracker.onArmedState(armed)
     }
 
     /** Position of the receiving antenna (the phone); null if not known. */
@@ -141,29 +186,23 @@ class TerrainMonitor(
 
     /** Declares the current aircraft position to be the takeoff point until the next [reset]. */
     fun setTakeoffHere(): Boolean {
-        val position = aircraft ?: return false
-        takeoff = position
-        takeoffLocked = true
+        if (!tracker.setTakeoffHere()) return false
         requestUpdate()
         return true
     }
 
     /** Forgets everything known about the flight (new connection, replay restart). */
     fun reset() {
-        aircraft = null
-        altitude = Float.NaN
-        takeoff = null
-        takeoffLocked = false
-        disarmed = false
+        if (BuildConfig.DEBUG) Log.d(STATE_TAG, "reset")
+        tracker.reset()
         generation++
-        if (model != null) {
-            listener.onTerrainState(State(Float.NaN, Float.NaN, Float.NaN, false, false, null, emptyList(), Float.NaN, Float.NaN))
-        }
+        deliver(EMPTY_STATE)
     }
 
     /** Recomputes the state, e.g. after a change of settings. */
     fun requestUpdate() {
         val handler = worker ?: return
+        if (model == null || listener == null) return
         if (updateScheduled) return
         updateScheduled = true
         val delay = lastUpdateTime + MIN_UPDATE_INTERVAL_MS - System.currentTimeMillis()
@@ -182,13 +221,8 @@ class TerrainMonitor(
         generation++
         // Closed on the worker thread, after whatever it is still computing
         val terrain = model
-        worker?.post {
-            try {
-                terrain?.close()
-            } catch (e: Exception) {
-                Log.w(TAG, "Cannot close the terrain data", e)
-            }
-        }
+        model = null
+        worker?.post { close(terrain) }
         thread?.quitSafely()
         thread = null
         worker = null
@@ -196,6 +230,7 @@ class TerrainMonitor(
 
     private class Input(
         val generation: Int,
+        val model: TerrainModel,
         val aircraft: Position,
         val altitude: Float,
         val takeoff: Position?,
@@ -210,12 +245,14 @@ class TerrainMonitor(
     )
 
     private fun snapshot(): Input? {
-        val position = aircraft ?: return null
+        val position = tracker.aircraft ?: return null
+        val terrain = model ?: return null
         return Input(
             generation,
+            terrain,
             position,
-            altitude,
-            takeoff,
+            tracker.altitude,
+            tracker.takeoff,
             antenna,
             preferenceManager.getTerrainAltitudeReference(),
             preferenceManager.getTerrainHeightLimit(),
@@ -228,16 +265,16 @@ class TerrainMonitor(
     }
 
     private fun compute(input: Input) {
-        val terrain = model ?: return
         val state = try {
-            evaluate(terrain, input)
+            evaluate(input.model, input)
         } catch (e: Exception) {
             Log.w(TAG, "Terrain evaluation failed", e)
             return
         }
+        if (BuildConfig.DEBUG) Log.d(STATE_TAG, describe(input, state))
         mainHandler.post {
             if (input.generation == generation) {
-                listener.onTerrainState(state)
+                deliver(state)
             }
         }
     }
@@ -313,5 +350,21 @@ class TerrainMonitor(
             ground,
             if (terrain.hasObjects) terrain.surfaceAt(lat, lon) else Float.NaN
         )
+    }
+
+    /**
+     * One line with the inputs and the outputs of a computation, for comparing runs (debug
+     * builds only): the same inputs have to give the same outputs.
+     */
+    private fun describe(input: Input, state: State): String {
+        fun p(position: Position?) =
+            if (position == null) "-" else String.format(Locale.US, "%.6f,%.6f", position.lat, position.lon)
+        fun m(v: Float) = if (v.isNaN()) "-" else String.format(Locale.US, "%.2f", v)
+        return "in aircraft=${p(input.aircraft)} alt=${m(input.altitude)} ref=${input.altitudeReference}" +
+                " takeoff=${p(input.takeoff)} antenna=${p(input.antenna)}" +
+                " | out agl=${m(state.heightAboveGround)} limit=${m(state.altitudeLimit)}" +
+                " los=${m(state.minLosAltitude)} above=${state.aboveLimit} below=${state.belowLos}" +
+                " obstacle=${p(state.losObstacle)} blocked=${state.losBlocked.size}" +
+                " ground=${m(state.groundElevation)} surface=${m(state.surfaceElevation)}"
     }
 }

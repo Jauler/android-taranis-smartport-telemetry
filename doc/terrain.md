@@ -24,9 +24,12 @@ marked in red (only while the home line is shown). The readouts are ordinary sen
 * The altitude sensor normally reports the height above the takeoff point. The application
   takes the position of the aircraft at the moment of arming as the takeoff point (the first
   received position if the armed state is unknown) and looks up the ground elevation there.
-  *Set takeoff point at UAV location* in the map menu overrides it. Some flight controllers
-  report altitude above sea level instead (e.g. Betaflight over CRSF); switch
-  *Settings > Terrain > Altitude sensor shows* to *Altitude above sea level* for those.
+  The takeoff point is kept for the whole flight, also when the screen is rotated or closed
+  and when the link is lost and found again; connecting from the application or starting a
+  replay begins a new one. *Set takeoff point at UAV location* in the map menu overrides it.
+  Some flight controllers report altitude above sea level instead (e.g. Betaflight 2026.6 and
+  later over CRSF); switch *Settings > Terrain > Altitude sensor shows* to *Altitude above sea
+  level* for those.
 * The receiving antenna is assumed to be where the phone is, the home end of the home line
   (where the aircraft took off if the phone has no location fix; when a log is replayed, where
   the recorded track starts, as the phone may be anywhere by then), at *Receiving antenna height above ground* (set it to the height of a
