@@ -102,6 +102,11 @@ Given a terrain pack (an offline elevation model with tree and building heights,
 Here the quad is 10 km out at 124 m, but the link needs 207 m: two stretches near the pilot
 (the red marks on the home line) cut into the Fresnel zone.
 
+## For developers
+
+How the app is built (modules, data flow, threads, how to add a processor or monitor) and how to
+run the unit, integration and on-device tests: [doc/architecture.md](doc/architecture.md).
+
 ## Credits
 
 This is a fork of [RomanLut's version](https://github.com/RomanLut/android-taranis-smartport-telemetry)
