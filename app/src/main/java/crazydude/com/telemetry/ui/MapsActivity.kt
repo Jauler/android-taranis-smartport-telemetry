@@ -1509,7 +1509,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
     }
 
     private fun resetUI() {
-        phoneBattery.text = "-"
+        // the phone's battery is known whatever the link does
+        if (lastPhoneBattery > 0) updatePhoneBattery() else phoneBattery.text = "-"
         render()
     }
 

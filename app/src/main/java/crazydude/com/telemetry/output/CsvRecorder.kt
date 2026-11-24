@@ -18,6 +18,9 @@ import java.util.TimerTask
 class CsvRecorder(private val writer: Writer, private val values: () -> FlightValues?) {
 
     private val timer = Timer("csv")
+    // made once: building them for every row costs more than the row itself
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd")
+    private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS")
     @Volatile
     private var closed = false
 
@@ -25,7 +28,7 @@ class CsvRecorder(private val writer: Writer, private val values: () -> FlightVa
         writeLine(HEADER)
         timer.scheduleAtFixedRate(object : TimerTask() {
             override fun run() {
-                values()?.let { writeLine(row(it, Date())) }
+                values()?.let { writeLine(row(it, Date(), dateFormat, timeFormat)) }
             }
         }, 1000, 200)
     }
@@ -61,11 +64,16 @@ class CsvRecorder(private val writer: Writer, private val values: () -> FlightVa
         fun open(file: File, values: () -> FlightValues?) = CsvRecorder(FileWriter(file), values)
 
         /** One row, with 0 for what was not received, as always. */
-        fun row(v: FlightValues, at: Date): List<String> {
+        fun row(
+            v: FlightValues,
+            at: Date,
+            dateFormat: SimpleDateFormat = SimpleDateFormat("yyyy-MM-dd"),
+            timeFormat: SimpleDateFormat = SimpleDateFormat("HH:mm:ss.SSS")
+        ): List<String> {
             val position = v.position
             return listOf(
-                SimpleDateFormat("yyyy-MM-dd").format(at),
-                SimpleDateFormat("HH:mm:ss.SSS").format(at),
+                dateFormat.format(at),
+                timeFormat.format(at),
                 (v.rssi ?: 0).toString(),
                 (v.rssiDbm1 ?: 0).toString(),
                 (v.rssiDbm2 ?: 0).toString(),
