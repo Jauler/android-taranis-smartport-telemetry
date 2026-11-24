@@ -120,7 +120,10 @@ public class TextViewStableSize extends AppCompatTextView {
         this.seenMaxWidth = Math.max( this.seenMaxWidth, minTextWidth);
         this.seenMaxWidth = Math.max( this.seenMaxWidth, getMeasuredWidth());
 
-        this.setMinWidth( this.seenMaxWidth );
+        // setMinWidth asks for a new layout and a redraw every time: only when it grows
+        if (this.getMinWidth() != this.seenMaxWidth) {
+            this.setMinWidth( this.seenMaxWidth );
+        }
     }
 
 

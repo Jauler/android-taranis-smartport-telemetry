@@ -1651,6 +1651,19 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
     }
 
     /** Draws the telemetry state: the readouts, the aircraft and its track. */
+    // what render() showed last: a view set to the same again would be laid out and drawn again
+    private var shownRoll = Float.NaN
+    private var shownPitch = Float.NaN
+    private var shownRcChannels: IntArray? = null
+
+    /**
+     * Sets the text only when it changes: setting a readout's text, even the same one, lays out
+     * the whole screen and redraws it, about 30 ms on a slow tablet.
+     */
+    private fun TextView.setTextIfChanged(value: CharSequence) {
+        if (text.toString() != value.toString()) text = value
+    }
+
     /** Draws the flight operation: the readouts, the aircraft and its track, the traffic, the terrain. */
     private fun render() {
         val operation = dataService?.operation
@@ -1658,53 +1671,59 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
         val environment = operation?.read { _, e -> e.snapshot() }
         val v = flight?.values ?: FlightValues()
 
-        satellites.text = v.satellites?.let { if (it == 99) "ES" else it.toString() } ?: "0"
-        rssi.text = v.rssi?.let { if (it == -1) "-" else it.toString() } ?: "-"
+        satellites.setTextIfChanged(v.satellites?.let { if (it == 99) "ES" else it.toString() } ?: "0")
+        rssi.setTextIfChanged(v.rssi?.let { if (it == -1) "-" else it.toString() } ?: "-")
         setRSSIIcon(v.rssi ?: 100)
-        upLq.text = v.upLq?.let { if (it == -1) "-" else it.toString() } ?: "-"
+        upLq.setTextIfChanged(v.upLq?.let { if (it == -1) "-" else it.toString() } ?: "-")
         setUPLQIcon(v.upLq ?: 100)
-        dnLq.text = v.dnLq?.let { if (it == -1) "-" else it.toString() } ?: "-"
+        dnLq.setTextIfChanged(v.dnLq?.let { if (it == -1) "-" else it.toString() } ?: "-")
         setDNLQIcon(v.dnLq ?: 100)
-        rssiDbm1.text = v.rssiDbm1?.let { if (it == 0) "-" else it.toString() } ?: "-"
+        rssiDbm1.setTextIfChanged(v.rssiDbm1?.let { if (it == 0) "-" else it.toString() } ?: "-")
         setRssiDbm1Icon(v.rssiDbm1 ?: 0)
-        rssiDbm2.text = v.rssiDbm2?.let { if (it == 0) "-" else it.toString() } ?: "-"
+        rssiDbm2.setTextIfChanged(v.rssiDbm2?.let { if (it == 0) "-" else it.toString() } ?: "-")
         setRssiDbm2Icon(v.rssiDbm2 ?: 0)
-        rssiDbmd.text = v.rssiDbmd?.let { if (it == 0) "-" else it.toString() } ?: "-"
+        rssiDbmd.setTextIfChanged(v.rssiDbmd?.let { if (it == 0) "-" else it.toString() } ?: "-")
         setRssiDbmdIcon(v.rssiDbmd ?: 0)
-        elrsRate.text = v.elrsMode?.let { elrsModeText(it) } ?: "-"
-        upSnr.text = v.upSnr?.toString() ?: "-"
-        dnSnr.text = v.dnSnr?.toString() ?: "-"
-        ant.text = v.antenna?.let { (it + 1).toString() } ?: "-"
-        power.text = v.power?.let { powerText(it) } ?: "-"
+        elrsRate.setTextIfChanged(v.elrsMode?.let { elrsModeText(it) } ?: "-")
+        upSnr.setTextIfChanged(v.upSnr?.toString() ?: "-")
+        dnSnr.setTextIfChanged(v.dnSnr?.toString() ?: "-")
+        ant.setTextIfChanged(v.antenna?.let { (it + 1).toString() } ?: "-")
+        power.setTextIfChanged(v.power?.let { powerText(it) } ?: "-")
 
         // "Voltage reported by telemetry": the battery's or a cell's
         val reportsBattery = preferenceManager.getReportVoltage() == "Battery"
         val batteryVoltage = if (reportsBattery) v.vbatOrCell ?: v.voltage else v.voltage
         val cellVoltage = if (reportsBattery) v.cellVoltage else v.vbatOrCell ?: v.cellVoltage
-        voltage.text = batteryVoltage?.let { "${"%.2f".format(it)} V" } ?: "-"
-        cell_voltage.text = cellVoltage?.let { "${"%.2f".format(it)} V" } ?: "-"
-        current.text = v.current?.let { "${"%.2f".format(it)} A" } ?: "-"
+        voltage.setTextIfChanged(batteryVoltage?.let { "${"%.2f".format(it)} V" } ?: "-")
+        cell_voltage.setTextIfChanged(cellVoltage?.let { "${"%.2f".format(it)} V" } ?: "-")
+        current.setTextIfChanged(v.current?.let { "${"%.2f".format(it)} A" } ?: "-")
         renderFuel(v.fuel, cellVoltage)
 
-        speed.text = v.speed?.let { "${it.roundToInt()} km/h" } ?: "-"
-        airspeed.text = v.airSpeed?.let { "${it.roundToInt()} km/h" } ?: "-"
-        vspeed.text = v.vSpeed?.let { "${"%.1f".format(it)} m/s" } ?: "-"
-        altitude.text = v.altitude?.let { formatHeight(it) } ?: "-"
-        altitude_msl.text = v.gpsAltitude?.let { formatHeight(it) } ?: "-"
-        distance.text = v.distance?.let { formatDistance(it.toFloat()) } ?: "-"
-        traveled_distance.text = formatDistance((flight?.traveledDistance ?: 0.0).toFloat())
-        throttle.text = v.throttle?.toString() ?: "-"
+        speed.setTextIfChanged(v.speed?.let { "${it.roundToInt()} km/h" } ?: "-")
+        airspeed.setTextIfChanged(v.airSpeed?.let { "${it.roundToInt()} km/h" } ?: "-")
+        vspeed.setTextIfChanged(v.vSpeed?.let { "${"%.1f".format(it)} m/s" } ?: "-")
+        altitude.setTextIfChanged(v.altitude?.let { formatHeight(it) } ?: "-")
+        altitude_msl.setTextIfChanged(v.gpsAltitude?.let { formatHeight(it) } ?: "-")
+        distance.setTextIfChanged(v.distance?.let { formatDistance(it.toFloat()) } ?: "-")
+        traveled_distance.setTextIfChanged(formatDistance((flight?.traveledDistance ?: 0.0).toFloat()))
+        throttle.setTextIfChanged(v.throttle?.toString() ?: "-")
 
         val rate = flight?.telemetryRate ?: 0
-        tlmRate.text = if (rate < 1000) "$rate b/s" else "${"%.1f".format(rate / 1000f)} kb/s"
+        tlmRate.setTextIfChanged(if (rate < 1000) "$rate b/s" else "${"%.1f".format(rate / 1000f)} kb/s")
         val stale = if (flight?.kind == Flight.Kind.LIVE) flight.stale else emptySet()
-        statustext.text = if (Sensor.STATUSTEXT in stale) "" else v.statusText ?: ""
-        mode.text = modeText(flight)
-        horizonView.setRoll(v.roll ?: 0f)
-        horizonView.setPitch(v.pitch ?: 0f)
-        v.rcChannels?.let { rc_widget.setChannels(it) }
+        statustext.setTextIfChanged(if (Sensor.STATUSTEXT in stale) "" else v.statusText ?: "")
+        mode.setTextIfChanged(modeText(flight))
+        val roll = v.roll ?: 0f
+        val pitch = v.pitch ?: 0f
+        if (roll != shownRoll) horizonView.setRoll(roll)
+        if (pitch != shownPitch) horizonView.setPitch(pitch)
+        shownRoll = roll
+        shownPitch = pitch
+        v.rcChannels?.let { channels -> if (shownRcChannels?.contentEquals(channels) != true) rc_widget.setChannels(channels) }
+        shownRcChannels = v.rcChannels
         renderStale(stale)
-        tlmRate.alpha = if (flight?.kind == Flight.Kind.REPLAY) 0.5f else 1f
+        val rateAlpha = if (flight?.kind == Flight.Kind.REPLAY) 0.5f else 1f
+        if (tlmRate.alpha != rateAlpha) tlmRate.alpha = rateAlpha
 
         renderAircraft(flight)
         renderTerrain(flight?.terrain ?: TerrainMonitor.EMPTY_STATE)
@@ -1716,7 +1735,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
     private fun renderStale(stale: Set<Sensor>) {
         sensorViews.forEach { (sensor, views) ->
             val alpha = if (sensor in stale) 0.5f else 1f
-            views.forEach { it.alpha = alpha }
+            views.forEach { if (it.alpha != alpha) it.alpha = alpha }
         }
     }
 
@@ -1827,7 +1846,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
 
     private fun renderFuel(fuel: Int?, cellVoltage: Float?) {
         if (fuel == null) {
-            this.fuel.text = "-"
+            this.fuel.setTextIfChanged("-")
             setFuelIcon(-1)
             return
         }
@@ -1835,7 +1854,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
         var percentage = fuel
         when (batteryUnits) {
             "mAh", "mWh" -> {
-                this.fuel.text = this.formatPower(fuel, batteryUnits)
+                this.fuel.setTextIfChanged(this.formatPower(fuel, batteryUnits))
                 //for icon, calculate percentage from cell voltage if available
                 val cell = cellVoltage ?: 0f
                 percentage = if ((cell > 0) && (cell <= 4.4)) {
@@ -1845,7 +1864,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
                 }
             }
             "Percentage" -> {
-                this.fuel.text = "$fuel%"
+                this.fuel.setTextIfChanged("$fuel%")
             }
         }
         setFuelIcon(percentage)
@@ -1943,6 +1962,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             0 -> R.drawable.ic_rssi_0
             else -> R.drawable.ic_rssi_5
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.rssi.tag == it) return@let
+            this.rssi.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.rssi.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(
@@ -1971,6 +1993,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             0 -> R.drawable.ic_up_lq_0
             else -> R.drawable.ic_up_lq_5
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.upLq.tag == it) return@let
+            this.upLq.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.upLq.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(
@@ -1999,6 +2024,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             0 -> R.drawable.ic_dn_lq_0
             else -> R.drawable.ic_dn_lq_5
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.dnLq.tag == it) return@let
+            this.dnLq.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.dnLq.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(
@@ -2027,6 +2055,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             0 -> R.drawable.ic_rssi_dbm1_0
             else -> R.drawable.ic_rssi_dbm1_5
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.rssiDbm1.tag == it) return@let
+            this.rssiDbm1.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.rssiDbm1.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(
@@ -2055,6 +2086,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             0 -> R.drawable.ic_rssi_dbm2_0
             else -> R.drawable.ic_rssi_dbm2_5
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.rssiDbm2.tag == it) return@let
+            this.rssiDbm2.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.rssiDbm2.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(
@@ -2083,6 +2117,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             0 -> R.drawable.ic_rssi_dbmd_0
             else -> R.drawable.ic_rssi_dbmd_5
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.rssiDbmd.tag == it) return@let
+            this.rssiDbmd.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.rssiDbmd.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(
@@ -2228,6 +2265,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
             in 0..20 -> R.drawable.ic_battery_alert
             else -> R.drawable.ic_battery_unknown
         }.let {
+            // a new icon lays the screen out again: only when it changes
+            if (this.fuel.tag == it) return@let
+            this.fuel.tag = it
             if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 this.fuel.setCompoundDrawablesWithIntrinsicBounds(
                     ContextCompat.getDrawable(this, it),
@@ -2665,13 +2705,13 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
     }
 
     private fun renderTerrain(state: TerrainMonitor.State) {
-        heightAboveGround.text = formatTerrainHeight(state.heightAboveGround)
+        heightAboveGround.setTextIfChanged(formatTerrainHeight(state.heightAboveGround))
         heightAboveGround.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
-        altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)
+        altitudeLimit.setTextIfChanged(formatTerrainHeight(state.altitudeLimit))
         altitudeLimit.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
-        groundElevation.text = formatTerrainHeight(state.groundElevation)
-        surfaceElevation.text = formatTerrainHeight(state.surfaceElevation)
-        minLosAltitude.text = formatTerrainHeight(state.minLosAltitude)
+        groundElevation.setTextIfChanged(formatTerrainHeight(state.groundElevation))
+        surfaceElevation.setTextIfChanged(formatTerrainHeight(state.surfaceElevation))
+        minLosAltitude.setTextIfChanged(formatTerrainHeight(state.minLosAltitude))
         minLosAltitude.setTextColor(if (state.belowLos) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         losBlocked = state.losBlocked
         showLosBlocked()
