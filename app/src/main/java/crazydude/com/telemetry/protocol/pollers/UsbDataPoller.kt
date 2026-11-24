@@ -6,7 +6,7 @@ import com.hoho.android.usbserial.util.SerialInputOutputManager
 import crazydude.com.telemetry.protocol.*
 import crazydude.com.telemetry.protocol.decoder.DataDecoder
 import crazydude.com.telemetry.protocol.sniffer.SerialLink
-import java.io.FileOutputStream
+import java.io.OutputStream
 import java.io.IOException
 import java.util.concurrent.Executors
 
@@ -15,7 +15,7 @@ class UsbDataPoller(
     private val serialPort: UsbSerialPort,
     private val baudrate: Int,
     private val connection: UsbDeviceConnection,
-    private val logFile: FileOutputStream?
+    private val logFile: OutputStream?
 ) : DataPoller, SerialLink {
     private var outputManager: SerialInputOutputManager? = null
     private var selectedProtocol: Protocol? = null

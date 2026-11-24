@@ -18,6 +18,7 @@ import com.hoho.android.usbserial.driver.UsbSerialPort
 import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.logger.OtxCsvLogger
+import crazydude.com.telemetry.logger.RcFrameThrottle
 import crazydude.com.telemetry.manager.PreferenceManager
 import crazydude.com.telemetry.manager.TerrainMonitor
 import crazydude.com.telemetry.maps.Position
@@ -31,6 +32,7 @@ import crazydude.com.telemetry.protocol.sniffer.SerialLink
 import crazydude.com.telemetry.ui.MapsActivity
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.io.IOException
 import java.lang.NullPointerException
 import java.text.SimpleDateFormat
@@ -196,8 +198,8 @@ class DataService : Service(), DataDecoder.Listener {
         }
     }
 
-    private fun createLogFile(): FileOutputStream? {
-        var fileOutputStream: FileOutputStream? = null
+    private fun createLogFile(): OutputStream? {
+        var fileOutputStream: OutputStream? = null
         if (preferenceManager.isLoggingEnabled()
             && ContextCompat.checkSelfPermission(
                 this,
@@ -208,7 +210,8 @@ class DataService : Service(), DataDecoder.Listener {
             val dir = Environment.getExternalStoragePublicDirectory("TelemetryLogs")
             dir.mkdirs()
             val file = File(dir, "$name.tlm")
-            fileOutputStream = FileOutputStream(file)
+            // RC channels frames come at the packet rate and would fill most of the log
+            fileOutputStream = RcFrameThrottle(FileOutputStream(file), preferenceManager.getLogRcChannelsRate())
         }
 
         return fileOutputStream

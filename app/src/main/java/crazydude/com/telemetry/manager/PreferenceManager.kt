@@ -68,6 +68,11 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getBoolean("logging_enabled", true)
     }
 
+    /** RC channels frames kept in the raw log per second; 0: all of them. */
+    fun getLogRcChannelsRate(): Int {
+        return sharedPreferences.getString("log_rc_channels_rate", "5")?.toIntOrNull() ?: 5
+    }
+
     fun isCSVLoggingEnabled(): Boolean {
         return sharedPreferences.getBoolean("csv_logging_enabled", true)
     }

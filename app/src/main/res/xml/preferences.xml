@@ -9,6 +9,15 @@
             android:defaultValue="true"
             android:key="logging_enabled"/>
 
+    <ListPreference
+            android:title="RC channels in the RAW log"
+            android:summary="An ELRS receiver sends the RC channels at the packet rate (up to 1000 a second), which would fill most of the log. Frames kept per second: %s"
+            android:entries="@array/LogRcChannelsRateEntries"
+            android:entryValues="@array/LogRcChannelsRateValues"
+            android:defaultValue="5"
+            android:key="log_rc_channels_rate"
+            android:dependency="logging_enabled"/>
+
     <SwitchPreference
             android:title="Telemetry logging to CSV"
             android:summary="Save telemetry data to sdcard in OpenTX CSV format (.csv)"
