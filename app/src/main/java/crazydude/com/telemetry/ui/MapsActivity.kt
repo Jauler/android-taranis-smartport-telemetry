@@ -134,7 +134,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     enum class RequestWritePermissionSequenceType {
-        NONE, CONNECT, RENAME, DELETE, EXPORT_GPX, EXPORT_KML
+        NONE, CONNECT, CONNECT_USB, RENAME, DELETE, EXPORT_GPX, EXPORT_KML
     }
 
     private var map: MapWrapper? = null
@@ -1199,7 +1199,16 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
+    /** The raw (.tlm) and CSV logs both need the write permission. */
+    private fun isAnyLoggingEnabled(): Boolean {
+        return preferenceManager.isLoggingEnabled() || preferenceManager.isCSVLoggingEnabled()
+    }
+
     private fun connectUSB() {
+        // without the permission the logs are skipped silently: ask first, like Bluetooth does
+        if (isAnyLoggingEnabled()) {
+            if (!requestWritePermission(RequestWritePermissionSequenceType.CONNECT_USB)) return
+        }
         val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
         val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
         val driver = drivers.firstOrNull()
@@ -1307,7 +1316,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
             return
         }
-        if (preferenceManager.isLoggingEnabled()) {
+        if (isAnyLoggingEnabled()) {
             if (!requestWritePermission(RequestWritePermissionSequenceType.CONNECT)) return;
         }
 
@@ -1477,7 +1486,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
             return
         }
-        if (preferenceManager.isLoggingEnabled()) {
+        if (isAnyLoggingEnabled()) {
             if (!requestWritePermission(RequestWritePermissionSequenceType.CONNECT)) return;
         }
 
@@ -1740,6 +1749,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     when (requestWritePermissionSequence) {
                         RequestWritePermissionSequenceType.CONNECT -> connect()
+                        RequestWritePermissionSequenceType.CONNECT_USB -> connectUSB()
                         RequestWritePermissionSequenceType.DELETE -> showDeleteLogDialog()
                         RequestWritePermissionSequenceType.RENAME -> showRenameLogDialog()
                         RequestWritePermissionSequenceType.EXPORT_GPX -> showExportGPXDialog()
