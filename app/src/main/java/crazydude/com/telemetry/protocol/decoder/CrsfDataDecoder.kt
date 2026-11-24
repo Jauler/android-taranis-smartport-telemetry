@@ -166,7 +166,8 @@ class CrsfDataDecoder(listener: Listener) : DataDecoder(listener) {
             in Protocol.RC_CHANNEL_0..Protocol.RC_CHANNEL_15 -> {
                 val index = data.telemetryType - Protocol.RC_CHANNEL_0;
                 rcChannels[index] = data.data
-                listener.onRCChannels(rcChannels)
+                // a frame carries all 16 channels, one at a time: tell once it is complete
+                if (data.telemetryType == Protocol.RC_CHANNEL_15) listener.onRCChannels(rcChannels)
             }
             Protocol.DN_SNR -> {
                 listener.onDNSNRData(data.data)

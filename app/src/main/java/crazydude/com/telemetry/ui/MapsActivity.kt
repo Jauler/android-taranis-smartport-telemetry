@@ -249,12 +249,22 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var replayFileString: String? = null
     private var dataService: DataService? = null
     private var lastPhoneBattery = 0
-    private var lastTraveledDistance = 0.0
-    private var lastCellVoltage = 0.0f
+
+    /** The telemetry received, drawn by [render] at a fixed rate ([renderIntervalMs]). */
+    private val telemetryState = TelemetryState()
+    private val renderHandler = Handler(Looper.getMainLooper())
+    private val renderTask = object : Runnable {
+        override fun run() {
+            render()
+            renderHandler.postDelayed(this, renderIntervalMs())
+        }
+    }
+    // the track drawn so far belongs to this track of the telemetry state
+    private var renderedTrackResets = 0
+    private var seekBarDragging = false
 
     private var fullscreenWindow = false
 
-    private var gotHeading = false;
 
     private var logPlayer : LogPlayer? = null;
 
@@ -555,6 +565,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         updateScreenOrientation()
 
         this.registerReceiver(this.batInfoReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        renderHandler.post(renderTask)
     }
 
     private fun updateWindowFullscreenDecoration() {
@@ -903,22 +914,23 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                         }
 
                         override fun onStartTrackingTouch(p0: SeekBar?) {
+                            seekBarDragging = true
                         }
 
                         override fun onStopTrackingTouch(p0: SeekBar?) {
-
+                            seekBarDragging = false
                         }
                     })
 
                     //rewind to first gps data to zoom on plane
-                    lastGPS = Position(0.0, 0.0);
-                    gotHeading = false;
                     for (i in 0..seekBar.max - 1) {
                         logPlayer?.seek(i)
-                        if (lastGPS.lat != 0.0 && lastGPS.lon != 0.0 && marker != null && gotHeading) {
+                        if (telemetryState.gpsFix && telemetryState.position != null && telemetryState.heading != null) {
                             break;
                         }
                     }
+                    // creates the plane marker there, which zooms the map on it
+                    render()
 
                     logPlayer?.seek(0);
                 }
@@ -966,133 +978,135 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         firstFlightMode: DataDecoder.Companion.FlyMode?,
         secondFlightMode: DataDecoder.Companion.FlyMode?
     ) {
-        runOnUiThread {
-            // a live flight is fed to the terrain monitor by the data service itself
-            if (isInReplayMode()) terrainMonitor?.onArmedState(armed)
-            if (armed) {
-                mode.text = "Armed"
-            } else {
-                mode.text = "Disarmed"
-            }
-
-            if (heading) {
-                mode.text = mode.text.toString() + " | Heading"
-            }
-
-            decodeMode(firstFlightMode)
-            decodeMode(secondFlightMode)
+        telemetryState.update {
+            it.armed = armed
+            it.headingMode = heading
+            it.flyMode1 = firstFlightMode
+            it.flyMode2 = secondFlightMode
         }
+        // a live flight is fed to the terrain monitor by the data service itself; a replay
+        // runs on the main thread, every change of the armed state counts
+        if (isInReplayMode()) runOnUiThread { terrainMonitor?.onArmedState(armed) }
     }
 
-    private fun decodeMode(flyMode: DataDecoder.Companion.FlyMode?) {
+    private fun modeText(v: TelemetryState.Values): String {
+        val armed = v.armed ?: return v.connectionStatus
+        val text = StringBuilder(if (armed) "Armed" else "Disarmed")
+        if (v.headingMode) text.append(" | Heading")
+        decodeMode(text, v.flyMode1)
+        decodeMode(text, v.flyMode2)
+        return text.toString()
+    }
+
+    private fun decodeMode(text: StringBuilder, flyMode: DataDecoder.Companion.FlyMode?) {
         when (flyMode) {
             DataDecoder.Companion.FlyMode.ACRO -> {
-                mode.text = mode.text.toString() + " | Acro"
+                text.append(" | Acro")
             }
             DataDecoder.Companion.FlyMode.HORIZON -> {
-                mode.text = mode.text.toString() + " | Horizon"
+                text.append(" | Horizon")
             }
             DataDecoder.Companion.FlyMode.ANGLE -> {
-                mode.text = mode.text.toString() + " | Angle"
+                text.append(" | Angle")
             }
             DataDecoder.Companion.FlyMode.FAILSAFE -> {
-                mode.text = mode.text.toString() + " | Failsafe"
+                text.append(" | Failsafe")
             }
             DataDecoder.Companion.FlyMode.RTH -> {
-                mode.text = mode.text.toString() + " | RTH"
+                text.append(" | RTH")
             }
             DataDecoder.Companion.FlyMode.WAYPOINT -> {
-                mode.text = mode.text.toString() + " | Waypoint"
+                text.append(" | Waypoint")
             }
             DataDecoder.Companion.FlyMode.MANUAL -> {
-                mode.text = mode.text.toString() + " | Manual"
+                text.append(" | Manual")
             }
             DataDecoder.Companion.FlyMode.CRUISE -> {
-                mode.text = mode.text.toString() + " | Cruise"
+                text.append(" | Cruise")
             }
             DataDecoder.Companion.FlyMode.HOLD -> {
-                mode.text = mode.text.toString() + " | Hold"
+                text.append(" | Hold")
             }
             DataDecoder.Companion.FlyMode.HOME_RESET -> {
-                mode.text = mode.text.toString() + " | Home reset"
+                text.append(" | Home reset")
             }
             DataDecoder.Companion.FlyMode.CRUISE3D -> {
-                mode.text = mode.text.toString() + " | 3D Cruise"
+                text.append(" | 3D Cruise")
             }
             DataDecoder.Companion.FlyMode.ALTHOLD -> {
-                mode.text = mode.text.toString() + " | Alt hold"
+                text.append(" | Alt hold")
             }
             DataDecoder.Companion.FlyMode.ERROR -> {
-                mode.text = mode.text.toString() + " | !ERROR!"
+                text.append(" | !ERROR!")
             }
             DataDecoder.Companion.FlyMode.WAIT -> {
-                mode.text = mode.text.toString() + " | GPS wait"
+                text.append(" | GPS wait")
             }
             DataDecoder.Companion.FlyMode.CIRCLE -> {
-                mode.text = mode.text.toString() + " | Circle"
+                text.append(" | Circle")
             }
             DataDecoder.Companion.FlyMode.STABILIZE -> {
-                mode.text = mode.text.toString() + " | Stabilize"
+                text.append(" | Stabilize")
             }
             DataDecoder.Companion.FlyMode.TRAINING -> {
-                mode.text = mode.text.toString() + " | Training"
+                text.append(" | Training")
             }
             DataDecoder.Companion.FlyMode.FBWA -> {
-                mode.text = mode.text.toString() + " | FBWA"
+                text.append(" | FBWA")
             }
             DataDecoder.Companion.FlyMode.FBWB -> {
-                mode.text = mode.text.toString() + " | FBWB"
+                text.append(" | FBWB")
             }
             DataDecoder.Companion.FlyMode.AUTOTUNE -> {
-                mode.text = mode.text.toString() + " | Autotune"
+                text.append(" | Autotune")
             }
             DataDecoder.Companion.FlyMode.LOITER -> {
-                mode.text = mode.text.toString() + " | Loiter"
+                text.append(" | Loiter")
             }
             DataDecoder.Companion.FlyMode.TAKEOFF -> {
-                mode.text = mode.text.toString() + " | Takeoff"
+                text.append(" | Takeoff")
             }
             DataDecoder.Companion.FlyMode.AVOID_ADSB -> {
-                mode.text = mode.text.toString() + " | AVOID_ADSB"
+                text.append(" | AVOID_ADSB")
             }
             DataDecoder.Companion.FlyMode.GUIDED -> {
-                mode.text = mode.text.toString() + " | Guided"
+                text.append(" | Guided")
             }
             DataDecoder.Companion.FlyMode.INITIALISING -> {
-                mode.text = mode.text.toString() + " | Initializing"
+                text.append(" | Initializing")
             }
             DataDecoder.Companion.FlyMode.LANDING -> {
-                mode.text = mode.text.toString() + " | Landing"
+                text.append(" | Landing")
             }
             DataDecoder.Companion.FlyMode.MISSION -> {
-                mode.text = mode.text.toString() + " | Mission"
+                text.append(" | Mission")
             }
             DataDecoder.Companion.FlyMode.QSTABILIZE -> {
-                mode.text = mode.text.toString() + " | QSTABILIZE"
+                text.append(" | QSTABILIZE")
             }
             DataDecoder.Companion.FlyMode.QHOVER -> {
-                mode.text = mode.text.toString() + " | QHOVER"
+                text.append(" | QHOVER")
             }
             DataDecoder.Companion.FlyMode.QLOITER -> {
-                mode.text = mode.text.toString() + " | QLOITER"
+                text.append(" | QLOITER")
             }
             DataDecoder.Companion.FlyMode.QLAND -> {
-                mode.text = mode.text.toString() + " | QLAND"
+                text.append(" | QLAND")
             }
             DataDecoder.Companion.FlyMode.QRTL -> {
-                mode.text = mode.text.toString() + " | QRTL"
+                text.append(" | QRTL")
             }
             DataDecoder.Companion.FlyMode.QAUTOTUNE -> {
-                mode.text = mode.text.toString() + " | QAUTOTUNE"
+                text.append(" | QAUTOTUNE")
             }
             DataDecoder.Companion.FlyMode.QACRO -> {
-                mode.text = mode.text.toString() + " | QACRO"
+                text.append(" | QACRO")
             }
             DataDecoder.Companion.FlyMode.AUTONOMOUS -> {
-                mode.text = mode.text.toString() + " | Autonomous"
+                text.append(" | Autonomous")
             }
             DataDecoder.Companion.FlyMode.RATE -> {
-                mode.text = mode.text.toString() + " | Rate"
+                text.append(" | Rate")
             }
             null -> {
             }
@@ -1588,45 +1602,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     private fun resetUI() {
-        satellites.text = "0"
-        rssi.text = "-"
-        this.setRSSIIcon(100)
-        voltage.text = "-"
+        telemetryState.update { it.connectionStatus = "Disconnected" }
+        telemetryState.restart()
         phoneBattery.text = "-"
-        current.text = "-"
-        fuel.text = "-"
-        this.setFuelIcon(-1);
-        altitude.text = "-"
-        altitude_msl.text = "-"
-        speed.text = "-"
-        airspeed.text = "-"
-        vspeed.text = "-"
-        distance.text = "-"
-        traveled_distance.text = "0 m"
-        this.lastTraveledDistance = 0.0;
-        mode.text = "Disconnected"
-        statustext.text = "";
-        dnSnr.text = "-"
-        upSnr.text = "-"
-        dnLq.text = "-"
-        elrsRate.text = "-"
-        this.setDNLQIcon(100)
-        upLq.text = "-"
-        this.setUPLQIcon(100)
-        ant.text = "-"
-        power.text = "-"
-        rssiDbm1.text = "-"
-        this.setRssiDbm1Icon(0)
-        rssiDbm2.text = "-"
-        this.setRssiDbm2Icon(0)
-        rssiDbmd.text = "-"
-        this.setRssiDbmdIcon(0)
-        horizonView.setPitch(0f)
-        horizonView.setRoll(0f)
-        cell_voltage.text = "-"
-        this.lastCellVoltage = 0.0f;
-        throttle.text = "-"
-        tlmRate.text = "0 b/s"
+        render()
         // only the readouts: the flight itself is kept by the data service across a lost link
         onTerrainState(TerrainMonitor.EMPTY_STATE)
     }
@@ -1695,6 +1674,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onDestroy() {
         super.onDestroy()
+        renderHandler.removeCallbacks(renderTask)
         tts?.shutdown()
         tts = null
         ttsReady = false
@@ -1788,15 +1768,167 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onVSpeedData(vspeed: Float) {
         this.sensorTimeoutManager.onVSpeedData(vspeed);
-        runOnUiThread {
-            this.vspeed.text = "${"%.1f".format(vspeed)} m/s"
-        }
+        telemetryState.update { it.vSpeed = vspeed }
     }
 
     override fun onThrottleData(throttle: Int) {
         this.sensorTimeoutManager.onThrottleData(throttle);
-        runOnUiThread {
-            this.throttle.text = throttle.toString();
+        telemetryState.update { it.throttle = throttle }
+    }
+
+    /**
+     * The render rate: the telemetry comes much faster than it is worth redrawing the screen.
+     * A replay being played or scrubbed is drawn at the rate the player steps.
+     */
+    private fun renderIntervalMs(): Long {
+        val replayMoving = isInReplayMode() && (logPlayer?.isPlaying() == true || seekBarDragging)
+        return if (replayMoving) 50L else 333L
+    }
+
+    /** Draws the telemetry state: the readouts, the aircraft and its track. */
+    private fun render() {
+        val snapshot = telemetryState.snapshot()
+        val v = snapshot.values
+
+        satellites.text = v.satellites?.let { if (it == 99) "ES" else it.toString() } ?: "0"
+        rssi.text = v.rssi?.let { if (it == -1) "-" else it.toString() } ?: "-"
+        setRSSIIcon(v.rssi ?: 100)
+        upLq.text = v.upLq?.let { if (it == -1) "-" else it.toString() } ?: "-"
+        setUPLQIcon(v.upLq ?: 100)
+        dnLq.text = v.dnLq?.let { if (it == -1) "-" else it.toString() } ?: "-"
+        setDNLQIcon(v.dnLq ?: 100)
+        rssiDbm1.text = v.rssiDbm1?.let { if (it == 0) "-" else it.toString() } ?: "-"
+        setRssiDbm1Icon(v.rssiDbm1 ?: 0)
+        rssiDbm2.text = v.rssiDbm2?.let { if (it == 0) "-" else it.toString() } ?: "-"
+        setRssiDbm2Icon(v.rssiDbm2 ?: 0)
+        rssiDbmd.text = v.rssiDbmd?.let { if (it == 0) "-" else it.toString() } ?: "-"
+        setRssiDbmdIcon(v.rssiDbmd ?: 0)
+        elrsRate.text = v.elrsMode?.let { elrsModeText(it) } ?: "-"
+        upSnr.text = v.upSnr?.toString() ?: "-"
+        dnSnr.text = v.dnSnr?.toString() ?: "-"
+        ant.text = v.antenna?.let { (it + 1).toString() } ?: "-"
+        power.text = v.power?.let { powerText(it) } ?: "-"
+
+        voltage.text = v.voltage?.let { "${"%.2f".format(it)} V" } ?: "-"
+        cell_voltage.text = v.cellVoltage?.let { "${"%.2f".format(it)} V" } ?: "-"
+        current.text = v.current?.let { "${"%.2f".format(it)} A" } ?: "-"
+        renderFuel(v)
+
+        speed.text = v.speed?.let { "${it.roundToInt()} km/h" } ?: "-"
+        airspeed.text = v.airSpeed?.let { "${it.roundToInt()} km/h" } ?: "-"
+        vspeed.text = v.vSpeed?.let { "${"%.1f".format(it)} m/s" } ?: "-"
+        altitude.text = v.altitude?.let { formatHeight(it) } ?: "-"
+        altitude_msl.text = v.gpsAltitude?.let { formatHeight(it) } ?: "-"
+        distance.text = v.distance?.let { formatDistance(it.toFloat()) } ?: "-"
+        traveled_distance.text = formatDistance(v.traveledDistance.toFloat())
+        throttle.text = v.throttle?.toString() ?: "-"
+
+        val rate = v.telemetryRate ?: 0
+        tlmRate.text = if (rate < 1000) "$rate b/s" else "${"%.1f".format(rate / 1000f)} kb/s"
+        statustext.text = v.statusText ?: ""
+        mode.text = modeText(v)
+        horizonView.setRoll(v.roll ?: 0f)
+        horizonView.setPitch(v.pitch ?: 0f)
+        v.rcChannels?.let { rc_widget.setChannels(it) }
+
+        renderAircraft(snapshot)
+    }
+
+    private fun renderAircraft(snapshot: TelemetryState.Snapshot) {
+        val v = snapshot.values
+        hasGPSFix = v.gpsFix
+        if (snapshot.trackResets != renderedTrackResets) {
+            renderedTrackResets = snapshot.trackResets
+            polyLine?.clear()
+        }
+        if (snapshot.newTrackPoints.isNotEmpty()) polyLine?.submitPoints(snapshot.newTrackPoints)
+        commitRouteLinePoints()
+
+        val position = v.position
+        if (position == null) {
+            lastGPS = Position(0.0, 0.0)
+        } else if (position != lastGPS) {
+            lastGPS = position
+            marker?.let { it.position = lastGPS }
+            updateHomeLine()
+            updateHeading()
+            if (followMode) {
+                if (map?.initialized() ?: false) {
+                    map?.moveCamera(lastGPS)
+                }
+            } else {
+                this.map?.invalidate()
+            }
+            fr24Manager?.updateDronePosition(position.lat, position.lon)
+            terrainMonitor?.onAntennaPosition(antennaPosition())
+        }
+        val heading = v.heading
+        if (heading != null && heading != lastHeading) {
+            lastHeading = heading
+            marker?.rotation = heading
+            updateHeading()
+        }
+        tryCreateMarker()
+    }
+
+    private fun renderFuel(v: TelemetryState.Values) {
+        val fuel = v.fuel
+        if (fuel == null) {
+            this.fuel.text = "-"
+            setFuelIcon(-1)
+            return
+        }
+        val batteryUnits = preferenceManager.getBatteryUnits()
+        var percentage = fuel
+        when (batteryUnits) {
+            "mAh", "mWh" -> {
+                this.fuel.text = this.formatPower(fuel, batteryUnits)
+                //for icon, calculate percentage from cell voltage if available
+                val cellVoltage = v.cellVoltage ?: 0f
+                percentage = if ((cellVoltage > 0) && (cellVoltage <= 4.4)) {
+                    ((1 - (4.2f - cellVoltage)).coerceIn(0f, 1f) * 100).toInt()
+                } else {
+                    -1  //unknown icon
+                }
+            }
+            "Percentage" -> {
+                this.fuel.text = "$fuel%"
+            }
+        }
+        setFuelIcon(percentage)
+    }
+
+    private fun elrsModeText(mode: Int): String {
+        return when (mode) {
+            13 -> "F1000"
+            12 -> "F500"
+            11 -> "D500"
+            10 -> "D250"
+            9 -> "L500"
+            8 -> "L333c" //8ch
+            7 -> "L250"
+            6 -> "L200"
+            5 -> "L150"
+            4 -> "L100"
+            3 -> "L100c"  //8ch
+            2 -> "L50"
+            1 -> "L25"
+            0 -> "L4"
+            else -> mode.toString()
+        }
+    }
+
+    private fun powerText(power: Int): String {
+        return when (power) {
+            1 -> "10mW"
+            2 -> "25mW"
+            3 -> "100mW"
+            4 -> "500mW"
+            5 -> "1W"
+            6 -> "2W"
+            7 -> "250mW"
+            8 -> "50mW"
+            else -> power.toString()
         }
     }
 
@@ -1822,72 +1954,53 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onAltitudeData(altitude: Float) {
         this.sensorTimeoutManager.onAltitudeData(altitude);
-        runOnUiThread {
-            this.altitude.text = this.formatHeight(altitude);
-            if (isInReplayMode()) terrainMonitor?.onAltitude(altitude)
-        }
+        telemetryState.update { it.altitude = altitude }
+        if (isInReplayMode()) runOnUiThread { terrainMonitor?.onAltitude(altitude) }
     }
 
     override fun onGPSAltitudeData(altitude: Float) {
         this.sensorTimeoutManager.onGPSAltitudeData(altitude);
-        runOnUiThread {
-            this.altitude_msl.text = this.formatHeight(altitude);
-        }
+        telemetryState.update { it.gpsAltitude = altitude }
     }
 
     override fun onDistanceData(distance: Int) {
-        this.sensorTimeoutManager.onDistanceData(distance)
-        runOnUiThread {
-            this.distance.text = this.formatDistance(distance.toFloat());
-        }
+        this.sensorTimeoutManager.onDistanceData(distance);
+        telemetryState.update { it.distance = distance }
     }
 
     override fun onRollData(rollAngle: Float) {
-        runOnUiThread {
-            horizonView.setRoll(rollAngle)
-        }
+        telemetryState.update { it.roll = rollAngle }
     }
 
     override fun onPitchData(pitchAngle: Float) {
-        runOnUiThread {
-            horizonView.setPitch(pitchAngle)
-        }
+        telemetryState.update { it.pitch = pitchAngle }
     }
 
     override fun onGSpeedData(speed: Float) {
-        this.sensorTimeoutManager.onGSpeedData(speed)
-        runOnUiThread {
-            this.speed.text = "${speed.roundToInt()} km/h"
-        }
+        this.sensorTimeoutManager.onGSpeedData(speed);
+        telemetryState.update { it.speed = speed }
     }
 
     override fun onAirSpeedData(speed: Float) {
-        this.sensorTimeoutManager.onAirSpeedData(speed)
-        runOnUiThread {
-            this.airspeed.text = "${speed.roundToInt()} km/h"
-        }
+        this.sensorTimeoutManager.onAirSpeedData(speed);
+        telemetryState.update { it.airSpeed = speed }
     }
 
     override fun onRCChannels(rcChannels: IntArray) {
         this.sensorTimeoutManager.onRCChannels(rcChannels)
-        runOnUiThread {
-            this.rc_widget.setChannels(rcChannels)
-        }
+        telemetryState.setRcChannels(rcChannels)
     }
 
     override fun onStatusText(message: String) {
-        this.sensorTimeoutManager.onStatusText(message)
-        runOnUiThread {
-            this.statustext.text = message;
-        }
+        this.sensorTimeoutManager.onStatusText(message);
+        telemetryState.update { it.statusText = message }
     }
 
     override fun onGPSState(satellites: Int, gpsFix: Boolean) {
         this.sensorTimeoutManager.onGPSState(satellites, gpsFix)
-        runOnUiThread {
-            this.hasGPSFix = gpsFix
-            this.tryCreateMarker()
-            this.satellites.text = if (satellites == 99) "ES" else satellites.toString()
+        telemetryState.update {
+            it.satellites = satellites
+            it.gpsFix = gpsFix
         }
     }
 
@@ -2079,79 +2192,37 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onRSSIData(rssi: Int) {
         this.sensorTimeoutManager.onRSSIData(rssi);
-
-        runOnUiThread {
-            this.rssi.text = if (rssi == -1) "-" else rssi.toString()
-            this.setRSSIIcon(rssi);
-        }
+        telemetryState.update { it.rssi = rssi }
     }
 
     override fun onUpLqData(lq: Int) {
         this.sensorTimeoutManager.onUpLqData(lq);
-
-        runOnUiThread {
-            this.upLq.text = if (lq == -1) "-" else lq.toString()
-            this.setUPLQIcon(lq);
-        }
+        telemetryState.update { it.upLq = lq }
     }
 
     override fun onDnLqData(lq: Int) {
         this.sensorTimeoutManager.onDnLqData(lq);
-
-        runOnUiThread {
-            this.dnLq.text = if (lq == -1) "-" else lq.toString()
-            this.setDNLQIcon(lq);
-        }
+        telemetryState.update { it.dnLq = lq }
     }
 
     override fun onRssiDbm1Data(rssi: Int) {
         this.sensorTimeoutManager.onRssiDbm1Data(rssi);
-
-        runOnUiThread {
-            this.rssiDbm1.text = if (rssi == 0) "-" else rssi.toString()
-            this.setRssiDbm1Icon(rssi);
-        }
+        telemetryState.update { it.rssiDbm1 = rssi }
     }
 
     override fun onRssiDbm2Data(rssi: Int) {
         this.sensorTimeoutManager.onRssiDbm2Data(rssi);
-
-        runOnUiThread {
-            this.rssiDbm2.text = if (rssi == 0) "-" else rssi.toString()
-            this.setRssiDbm2Icon(rssi);
-        }
+        telemetryState.update { it.rssiDbm2 = rssi }
     }
 
     override fun onRssiDbmdData(rssi: Int) {
         this.sensorTimeoutManager.onRssiDbmdData(rssi);
-
-        runOnUiThread {
-            this.rssiDbmd.text = if (rssi == 0) "-" else rssi.toString()
-            this.setRssiDbmdIcon(rssi);
-        }
+        telemetryState.update { it.rssiDbmd = rssi }
     }
 
     override fun onElrsModeModeData(mode: Int) {
         this.sensorTimeoutManager.onElrsModeModeData(mode);
-        runOnUiThread {
-            when (mode) {
-                13 -> this.elrsRate.text = "F1000"
-                12 -> this.elrsRate.text = "F500"
-                11 -> this.elrsRate.text = "D500"
-                10 -> this.elrsRate.text = "D250"
-                9 -> this.elrsRate.text = "L500"
-                8 -> this.elrsRate.text = "L333c" //8ch
-                7 -> this.elrsRate.text = "L250"
-                6 -> this.elrsRate.text = "L200"
-                5 -> this.elrsRate.text = "L150"
-                4 -> this.elrsRate.text = "L100"
-                3 -> this.elrsRate.text = "L100c"  //8ch
-                2 -> this.elrsRate.text = "L50"
-                1 -> this.elrsRate.text = "L25"
-                0 -> this.elrsRate.text = "L4"
-                else -> this.elrsRate.text = mode.toString();
-            }
-        }
+        telemetryState.update { it.elrsMode = mode }
     }
 
 
@@ -2181,86 +2252,50 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onVBATData(voltage: Float) {
         this.sensorTimeoutManager.onVBATData(voltage);
-        runOnUiThread {
-            this.voltage.text = "${"%.2f".format(voltage)} V"
-        }
+        telemetryState.update { it.voltage = voltage }
     }
 
     override fun onCellVoltageData(voltage: Float) {
-        this.lastCellVoltage = voltage;
-        runOnUiThread {
-            this.cell_voltage.text = "${"%.2f".format(voltage)} V"
-        }
+        telemetryState.update { it.cellVoltage = voltage }
     }
 
     override fun onVBATOrCellData(voltage: Float) {
-        runOnUiThread {
-            val reportVoltage = preferenceManager.getReportVoltage()
-            if (reportVoltage == "Battery") {
-                this.sensorTimeoutManager.onVBATData(voltage);
-                this.voltage.text = "${"%.2f".format(voltage)} V"
-            } else {
-                this.sensorTimeoutManager.onCellVoltageData(voltage)
-                this.cell_voltage.text = "${"%.2f".format(voltage)} V"
-                this.lastCellVoltage = voltage;
-            }
+        if (preferenceManager.getReportVoltage() == "Battery") {
+            this.sensorTimeoutManager.onVBATData(voltage)
+            telemetryState.update { it.voltage = voltage }
+        } else {
+            this.sensorTimeoutManager.onCellVoltageData(voltage)
+            telemetryState.update { it.cellVoltage = voltage }
         }
     }
 
     override fun onCurrentData(current: Float) {
-        this.sensorTimeoutManager.onCurrentData(current)
-        runOnUiThread {
-            this.current.text = "${"%.2f".format(current)} A"
-        }
+        this.sensorTimeoutManager.onCurrentData(current);
+        telemetryState.update { it.current = current }
     }
 
     override fun onDNSNRData(snr: Int) {
         this.sensorTimeoutManager.onDNSNRData(snr);
-        runOnUiThread {
-            this.dnSnr.text = snr.toString();
-        }
+        telemetryState.update { it.dnSnr = snr }
     }
 
     override fun onUPSNRData(snr: Int) {
         this.sensorTimeoutManager.onUPSNRData(snr);
-        runOnUiThread {
-            this.upSnr.text = snr.toString();
-        }
+        telemetryState.update { it.upSnr = snr }
     }
 
     override fun onAntData(activeAntena: Int) {
         this.sensorTimeoutManager.onAntData(activeAntena);
-        runOnUiThread {
-            this.ant.text = (activeAntena + 1).toString();
-        }
+        telemetryState.update { it.antenna = activeAntena }
     }
 
     override fun onPowerData(power: Int) {
         this.sensorTimeoutManager.onPowerData(power);
-        runOnUiThread {
-            when (power) {
-                1 -> this.power.text = "10mW"
-                2 -> this.power.text = "25mW"
-                3 -> this.power.text = "100mW"
-                4 -> this.power.text = "500mW"
-                5 -> this.power.text = "1W"
-                6 -> this.power.text = "2W"
-                7 -> this.power.text = "250mW"
-                8 -> this.power.text = "50mW"
-                else -> this.power.text = power.toString();
-            }
-        }
+        telemetryState.update { it.power = power }
     }
 
     override fun onHeadingData(heading: Float) {
-        gotHeading = true;
-        lastHeading = heading
-        runOnUiThread {
-            marker?.let {
-                it.rotation = heading
-                updateHeading()
-            }
-        }
+        telemetryState.update { it.heading = heading }
     }
 
     private fun updateHeading() {
@@ -2324,6 +2359,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
         this.sensorTimeoutManager.disableTimeouts()
         this.tlmRate.setAlpha(0.5f);
+        telemetryState.restart()
         lastGPS = Position(0.0, 0.0);
         replayHomeGPS = null
         hasGPSFix = false;
@@ -2373,7 +2409,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         menuButton.show()
         connectButton.text = getString(R.string.disconnect)
         connectButton.isEnabled = true
-        mode.text = "Connected"
+        telemetryState.update { it.connectionStatus = "Connected" }
         connectButton.setOnClickListener {
             connectButton.isEnabled = false
             connectButton.text = getString(R.string.disconnecting)
@@ -2386,7 +2422,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         runOnUiThread {
             Toast.makeText(this, "Connection failed", Toast.LENGTH_SHORT).show()
             connectButton.text = getString(R.string.connect)
-            mode.text = "Disconnected"
+            telemetryState.update { it.connectionStatus = "Disconnected" }
             connectButton.isEnabled = true
             connectButton.setOnClickListener {
                 connect()
@@ -2443,28 +2479,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     override fun onFuelData(fuel: Int) {
-        this.sensorTimeoutManager.onFuelData(fuel)
-        runOnUiThread {
-            val batteryUnits = preferenceManager.getBatteryUnits()
-            var percentage = fuel
-
-            when (batteryUnits) {
-                "mAh", "mWh" -> {
-                    this.fuel.text = this.formatPower(fuel, batteryUnits)
-                    //for icon, calculate percentage from cell voltage if available
-                    if ((lastCellVoltage > 0) && (lastCellVoltage <= 4.4)) {
-                        percentage = ((1 - (4.2f - lastCellVoltage)).coerceIn(0f, 1f) * 100).toInt()
-                    } else {
-                        percentage = -1;  //unknnow icon
-                    }
-                }
-                "Percentage" -> {
-                    this.fuel.text = "$fuel%"
-                }
-            }
-
-            this.setFuelIcon(percentage);
-        }
+        this.sensorTimeoutManager.onFuelData(fuel);
+        telemetryState.update { it.fuel = fuel }
     }
 
 
@@ -2477,15 +2493,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     override fun onDecoderRestart() {
-        runOnUiThread {
-            this.lastGPS = Position(0.0, 0.0);
-            this.hasGPSFix = false;
-            this.lastTraveledDistance = 0.0
-            this.polyLine?.clear()
-            // replay: the flight is played again from its start. A live decoder restarts when a
-            // connection is made, the data service decides whether that is a new flight
-            if (isInReplayMode()) terrainMonitor?.reset()
-        }
+        telemetryState.restart()
+        // replay: the flight is played again from its start. A live decoder restarts when a
+        // connection is made, the data service decides whether that is a new flight
+        if (isInReplayMode()) runOnUiThread { terrainMonitor?.reset() }
     }
 
     override fun onProtocolDetected( protocolName: String) {
@@ -2495,82 +2506,30 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     override fun commit() {
-        runOnUiThread {
-            commitRouteLinePoints()
-        }
+        // the track is drawn by render()
     }
 
     override fun onGPSData(list: List<Position>, addToEnd: Boolean) {
         this.sensorTimeoutManager.onGPSData(list, addToEnd);
-        runOnUiThread {
-            if (!addToEnd) {
-                polyLine?.clear()
-                this.lastTraveledDistance = 0.0;
-                lastGPS = Position(0.0,0.0)
-            }
-            if (hasGPSFix && list.isNotEmpty()) {
-                if (isInReplayMode() && replayHomeGPS == null) {
+        telemetryState.onPositions(list, addToEnd)
+        if (isInReplayMode() && list.isNotEmpty()) runOnUiThread {
+            if (telemetryState.gpsFix) {
+                if (replayHomeGPS == null) {
                     // LogPlayer delivers replay positions only through this method, in recorded
                     // order, and only with a GPS fix: the first one is where the flight started.
                     replayHomeGPS = list[0]
                 }
                 //the first point of a rebuilt track is where the flight has started
-                if (isInReplayMode()) terrainMonitor?.onAircraftPosition(list[0].lat, list[0].lon)
-                //add all points except last one
-                //last one will be fired in onGPSData()
-                if ( list.size>=2) {
-                    polyLine?.submitPoints(list.dropLast(1))
-                }
-
-                for (i in 0..list.size - 2) {
-                    if (this.lastGPS.lat != 0.0 && this.lastGPS.lon != 0.0) {
-                        this.lastTraveledDistance += GeoUtils.computeDistanceBetween(
-                            this.lastGPS.lat, this.lastGPS.lon, list[i].lat, list[i].lon
-                        )
-                    }
-                    lastGPS = Position(list[i].lat, list[i].lon)
-                }
-
-                onGPSData(list[list.size - 1].lat, list[list.size - 1].lon)
+                terrainMonitor?.onAircraftPosition(list[0].lat, list[0].lon)
+                terrainMonitor?.onAircraftPosition(list.last().lat, list.last().lon)
             }
         }
     }
 
     override fun onGPSData(latitude: Double, longitude: Double) {
         this.sensorTimeoutManager.onGPSData(latitude, longitude);
-        runOnUiThread {
-            if (Position(latitude, longitude) != lastGPS) {
-                var d = 0.0;
-                if (this.lastGPS.lat != 0.0 && this.lastGPS.lon != 0.0) {
-                    d = GeoUtils.computeDistanceBetween(
-                        this.lastGPS.lat, this.lastGPS.lon, latitude, longitude
-                    )
-                }
-                lastGPS = Position(latitude, longitude)
-                marker?.let { it.position = lastGPS }
-                updateHomeLine()
-                updateHeading()
-                if (followMode) {
-                    if (map?.initialized() ?: false) {
-                        map?.moveCamera(lastGPS)
-                    }
-                }
-                if (hasGPSFix) {
-                    polyLine?.submitPoints(listOf(lastGPS))
-                    this.lastTraveledDistance += d
-                    this.traveled_distance.text =
-                        this.formatDistance(this.lastTraveledDistance.toFloat());
-                }
-
-                if (!followMode) {
-                    this.map?.invalidate()
-                }
-                this.tryCreateMarker()
-                fr24Manager?.updateDronePosition(latitude, longitude)
-                terrainMonitor?.onAntennaPosition(antennaPosition())
-                if (isInReplayMode()) terrainMonitor?.onAircraftPosition(latitude, longitude)
-            }
-        }
+        val changed = telemetryState.onPosition(Position(latitude, longitude))
+        if (changed && isInReplayMode()) runOnUiThread { terrainMonitor?.onAircraftPosition(latitude, longitude) }
     }
 
     override fun onConnected() {
@@ -2578,10 +2537,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             reconnectionStartTime = 0L;
             Toast.makeText(this, "Connected!", Toast.LENGTH_SHORT).show()
             switchToConnectedState()
-            this.lastTraveledDistance = 0.0;
-            this.traveled_distance.text = "-"
-            this.lastGPS = Position(0.0, 0.0);
-            this.hasGPSFix = false;
+            telemetryState.restart()
 
             if (preferenceManager.getConnectionVoiceMessagesEnabled()) {
                 soundPool!!.play(connectedSoundId, 1f, 1f, 0, 0, 1f)
@@ -2705,7 +2661,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             }
             SensorTimeoutManager.SENSOR_STATUSTEXT -> {
                 if (this.sensorTimeoutManager.getSensorTimeout(sensorId)) {
-                    this.statustext.text = "";
+                    telemetryState.update { it.statusText = "" }
                 }
             }
             SensorTimeoutManager.SENSOR_DN_SNR -> {
@@ -2747,13 +2703,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     override fun onTelemetryRate(rate: Int) {
-        runOnUiThread {
-            if (rate < 1000) {
-                this.tlm_rate.text = "${rate} b/s"
-            } else {
-                this.tlm_rate.text = "${"%.1f".format(rate / 1000f)} kb/s"
-            }
-        }
+        telemetryState.update { it.telemetryRate = rate }
     }
 
     fun setFollowMode(mode: Boolean) {
