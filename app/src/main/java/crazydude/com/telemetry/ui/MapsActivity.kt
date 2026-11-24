@@ -556,7 +556,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
         startDataService()
 
-        checkAppInstallDate()
         initMap(false)
         map?.onCreate(savedInstanceState)
 
@@ -760,31 +759,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
         if ( marker == null ) {
             Toast.makeText(this, "Location is unknown", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun checkAppInstallDate() {
-        val installTime = packageManager.getPackageInfo(packageName, 0).firstInstallTime
-        val delta = System.currentTimeMillis() - installTime
-
-        if (delta / 1000 / 60 / 60 / 24 > 3 && !preferenceManager.isYoutubeChannelShown()) {
-            this.showDialog(AlertDialog.Builder(this)
-                .setTitle("Thanks for using my application")
-                .setMessage(
-                    "Thanks for using my application. As it's does not contain any ads and completely free, " +
-                            "you can help me by subscribing to my youtube channel"
-                )
-                .setPositiveButton("Subscribe") { dialog: DialogInterface?, i: Int ->
-                    startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://www.youtube.com/channel/UCjAhODF0Achhc1fynxEXQLg?view_as=subscriber&sub_confirmation=1")
-                        )
-                    )
-                }
-                .setNegativeButton("Cancel", null)
-                .setOnDismissListener { preferenceManager.setYoutubeShown() }
-                .create());
         }
     }
 

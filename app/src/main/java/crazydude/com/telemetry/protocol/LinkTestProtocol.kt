@@ -1,7 +1,6 @@
 package crazydude.com.telemetry.protocol
 
 import crazydude.com.telemetry.protocol.decoder.DataDecoder
-import crazydude.com.telemetry.protocol.decoder.LTMDataDecoder
 import crazydude.com.telemetry.protocol.decoder.LinkTestDataDecoder
 import kotlin.experimental.xor
 

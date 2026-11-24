@@ -98,14 +98,6 @@ class PreferenceManager(context: Context) {
         return sharedPreferences.getInt("drone_color", defaultPlaneColor)
     }
 
-    fun isYoutubeChannelShown(): Boolean {
-        return sharedPreferences.getBoolean("youtube_shown", false)
-    }
-
-    fun setYoutubeShown() {
-        sharedPreferences.edit().putBoolean("youtube_shown", true).apply()
-    }
-
     fun getBatteryUnits(): String {
         return sharedPreferences.getString("battery_units", "mAh") ?: "mAh"
     }

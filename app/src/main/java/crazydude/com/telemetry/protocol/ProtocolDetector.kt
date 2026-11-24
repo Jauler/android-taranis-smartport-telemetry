@@ -4,63 +4,46 @@ import crazydude.com.telemetry.protocol.decoder.DataDecoder
 
 class ProtocolDetector(private val callback: Callback) {
 
-    private val hits = arrayOf(0, 0, 0, 0, 0, 0)
-    private val sportProtocol =
-        FrSkySportProtocol(object : DataDecoder.Companion.DefaultDecodeListener() {
-            override fun onSuccessDecode() {
-                hits[0]++
-            }
-        })
+    private val hits = arrayOf(0, 0, 0, 0)
     private val crsfProtocol =
         CrsfProtocol(object : DataDecoder.Companion.DefaultDecodeListener() {
             override fun onSuccessDecode() {
-                hits[1]++
-            }
-        })
-    private val ltmProtocol =
-        LTMProtocol(object : DataDecoder.Companion.DefaultDecodeListener() {
-            override fun onSuccessDecode() {
-                hits[2]++
+                hits[0]++
             }
         })
     private val mavLinkProtocol =
         MAVLinkProtocol(object : DataDecoder.Companion.DefaultDecodeListener() {
             override fun onSuccessDecode() {
-                hits[3]++
+                hits[1]++
             }
         })
     private val mavLink2Protocol =
         MAVLink2Protocol(object : DataDecoder.Companion.DefaultDecodeListener() {
             override fun onSuccessDecode() {
-                hits[4]++
+                hits[2]++
             }
         })
 
     private val linkTestProtocol =
         LinkTestProtocol(object : DataDecoder.Companion.DefaultDecodeListener() {
             override fun onSuccessDecode() {
-                hits[5]++
+                hits[3]++
             }
         })
 
     fun feedData(data: Int) {
-        sportProtocol.process(data)
         crsfProtocol.process(data)
-        ltmProtocol.process(data)
         mavLinkProtocol.process(data)
         mavLink2Protocol.process(data)
         linkTestProtocol.process(data)
 
-
         hits.forEachIndexed { index, i ->
             if (i >= 2) {
                 when (index) {
-                    0 -> callback.onProtocolDetected(sportProtocol)
-                    1 -> callback.onProtocolDetected(crsfProtocol)
-                    2 -> callback.onProtocolDetected(ltmProtocol)
-                    3 -> callback.onProtocolDetected(mavLinkProtocol)
-                    4 -> callback.onProtocolDetected(mavLink2Protocol)
-                    5 -> callback.onProtocolDetected(linkTestProtocol)
+                    0 -> callback.onProtocolDetected(crsfProtocol)
+                    1 -> callback.onProtocolDetected(mavLinkProtocol)
+                    2 -> callback.onProtocolDetected(mavLink2Protocol)
+                    3 -> callback.onProtocolDetected(linkTestProtocol)
                 }
             }
         }

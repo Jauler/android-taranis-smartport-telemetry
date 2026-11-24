@@ -51,13 +51,6 @@ class UsbDataPoller(
                 ProtocolDetector.Callback {
                 override fun onProtocolDetected(protocol: Protocol?) {
                     when (protocol) {
-                        is FrSkySportProtocol -> {
-                            selectedProtocol =
-                                FrSkySportProtocol(
-                                    listener
-                                )
-                            listener?.onProtocolDetected("FrSky")
-                        }
 
                         is CrsfProtocol -> {
                             selectedProtocol =
@@ -67,13 +60,6 @@ class UsbDataPoller(
                             listener?.onProtocolDetected("CRSF")
                         }
 
-                        is LTMProtocol -> {
-                            selectedProtocol =
-                                LTMProtocol(
-                                    listener
-                                )
-                            listener?.onProtocolDetected("LTM")
-                        }
 
                         is MAVLinkProtocol -> {
                             selectedProtocol =

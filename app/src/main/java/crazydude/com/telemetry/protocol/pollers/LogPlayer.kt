@@ -59,17 +59,6 @@ class LogPlayer(val originalListener: DataDecoder.Listener) : DataDecoder.Listen
                     ProtocolDetector.Callback {
                     override fun onProtocolDetected(detectedProtocol: Protocol?) {
                         when (detectedProtocol) {
-                            is FrSkySportProtocol -> {
-                                tempProtocol =
-                                    FrSkySportProtocol(
-                                        tempDecoder
-                                    )
-                                protocol =
-                                    FrSkySportProtocol(
-                                        this@LogPlayer
-                                    )
-                                dataReadyListener?.onProtocolDetected("FrSky")
-                            }
 
                             is CrsfProtocol -> {
                                 tempProtocol =
@@ -83,17 +72,6 @@ class LogPlayer(val originalListener: DataDecoder.Listener) : DataDecoder.Listen
                                 dataReadyListener?.onProtocolDetected("CRSF")
                             }
 
-                            is LTMProtocol -> {
-                                tempProtocol =
-                                    LTMProtocol(
-                                        tempDecoder
-                                    )
-                                protocol =
-                                    LTMProtocol(
-                                        this@LogPlayer
-                                    )
-                                dataReadyListener?.onProtocolDetected("LTM")
-                            }
 
                             is MAVLinkProtocol -> {
                                 tempProtocol =

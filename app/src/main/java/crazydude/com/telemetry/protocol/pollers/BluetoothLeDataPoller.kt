@@ -136,13 +136,6 @@ class BluetoothLeDataPoller(
                                                         }
                                                     }
                                                 when (protocol) {
-                                                    is FrSkySportProtocol -> {
-                                                        selectedProtocol =
-                                                            FrSkySportProtocol(
-                                                                listener
-                                                            )
-                                                        listener?.onProtocolDetected("FrSky")
-                                                    }
 
                                                     is CrsfProtocol -> {
                                                         selectedProtocol =
@@ -152,13 +145,6 @@ class BluetoothLeDataPoller(
                                                         listener?.onProtocolDetected("CRSF")
                                                     }
 
-                                                    is LTMProtocol -> {
-                                                        selectedProtocol =
-                                                            LTMProtocol(
-                                                                listener
-                                                            )
-                                                        listener?.onProtocolDetected("LTM")
-                                                    }
 
                                                     is MAVLinkProtocol -> {
                                                         selectedProtocol =

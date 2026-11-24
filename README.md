@@ -5,8 +5,9 @@ the quad's position on a satellite or topographic map, along with its altitude, 
 from home, battery and link quality. Every flight is recorded so it can be replayed later or
 exported to GPX/KML. With an offline terrain pack it also knows the ground under the quad: it
 shows the height above ground, and how high the quad has to stay to keep a clear radio line of
-sight back to the pilot. The app is used and tested with CRSF (ExpressLRS). The FrSky
-SmartPort, LTM and MAVLink decoders are still in the code but are not tested and may not work.
+sight back to the pilot. The app is used and tested with CRSF (ExpressLRS). The MAVLink
+decoder is still in the code but is not tested and may not work. The FrSky SmartPort and LTM
+decoders have been removed.
 
 ![General view](doc/images/screenshot_general.jpg)
 

@@ -45,9 +45,7 @@ class FileDataPoller(
         val detector = ProtocolDetector(object : ProtocolDetector.Callback {
             override fun onProtocolDetected(protocol: Protocol?) {
                 selectedProtocol = when (protocol) {
-                    is FrSkySportProtocol -> FrSkySportProtocol(listener)
                     is CrsfProtocol -> CrsfProtocol(listener)
-                    is LTMProtocol -> LTMProtocol(listener)
                     is MAVLinkProtocol -> MAVLinkProtocol(listener)
                     is MAVLink2Protocol -> MAVLink2Protocol(listener)
                     else -> null
