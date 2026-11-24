@@ -1,5 +1,15 @@
 package crazydude.com.telemetry.ui
 
+import crazydude.com.telemetry.ingestion.ReplaySession
+import crazydude.com.telemetry.operation.Aircraft
+import crazydude.com.telemetry.operation.Event
+import crazydude.com.telemetry.operation.Flight
+import crazydude.com.telemetry.operation.FlightSnapshot
+import crazydude.com.telemetry.operation.FlightValues
+import crazydude.com.telemetry.operation.LinkStatus
+import crazydude.com.telemetry.operation.Sensor
+import crazydude.com.telemetry.output.Alerts
+import java.util.concurrent.Executor
 import android.app.Activity
 import android.app.PendingIntent
 import android.app.ProgressDialog
@@ -46,9 +56,7 @@ import crazydude.com.telemetry.BuildConfig
 import crazydude.com.telemetry.R
 import crazydude.com.telemetry.converter.Converter
 import crazydude.com.telemetry.manager.FlightPlanManager
-import crazydude.com.telemetry.manager.Fr24Manager
 import crazydude.com.telemetry.manager.PreferenceManager
-import crazydude.com.telemetry.manager.SensorTimeoutManager
 import crazydude.com.telemetry.manager.TerrainMonitor
 import crazydude.com.telemetry.maps.MapLabel
 import crazydude.com.telemetry.maps.MapLine
@@ -75,7 +83,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 //class MapsActivity : AppCompatActivity(), DataDecoder.Listener {
-class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Listener, SensorTimeoutManager.Listener, Fr24Manager.Listener, TerrainMonitor.Listener {
+class MapsActivity : androidx.appcompat.app.AppCompatActivity() {
 
     companion object {
         private const val REQUEST_ENABLE_BT: Int = 0
@@ -139,18 +147,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     private var map: MapWrapper? = null
 
-    private var soundPool: SoundPool? = null
-    private var connectedSoundId: Int = 0
-    private var disconnectedSoundId: Int = 0
-    private var connectionFailedSoundId: Int = 0
-    private var reconnectingSoundId : Int = 0
-
     private var marker: MapMarker? = null
     private var polyLine: MapLine? = null
-    private var fr24Manager: Fr24Manager? = null
     private val airplaneMarkers = mutableMapOf<Int, MapMarker>()
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    // the traffic drawn last, to redraw only when a new list comes
+    private var trafficShown: List<Aircraft>? = null
     private var headingPolyline: MapLine? = null
     private var flightPlanLines: MutableList<MapLine> = mutableListOf()
     private var flightPlanLabels: MutableList<MapLabel> = mutableListOf()
@@ -163,14 +164,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     /** Lives in the data service, null until it is bound. */
     private val terrainMonitor: TerrainMonitor?
         get() = dataService?.terrainMonitor
-    // a replay started before the data service was bound starts a new flight session once it is
-    private var terrainResetPending = false
     private var started = false
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             runOnUiThread {
                 updateHomeLine()
-                updateTerrainAntenna()
             }
         }
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -242,7 +240,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     private var lastGPS = Position(0.0, 0.0)
     // During replay the home line goes to where the flight started, not to the phone's current location.
-    private var replayHomeGPS: Position? = null
+    private var replayHome: Position? = null
     private var lastHeading = 0f
     private var followMode = true
     private var hasGPSFix = false
@@ -250,8 +248,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var dataService: DataService? = null
     private var lastPhoneBattery = 0
 
-    /** The telemetry received, drawn by [render] at a fixed rate ([renderIntervalMs]). */
-    private val telemetryState = TelemetryState()
+    /** Draws the flight operation of the data service at a fixed rate ([renderIntervalMs]). */
     private val renderHandler = Handler(Looper.getMainLooper())
     private val renderTask = object : Runnable {
         override fun run() {
@@ -259,14 +256,15 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             renderHandler.postDelayed(this, renderIntervalMs())
         }
     }
-    // the track drawn so far belongs to this track of the telemetry state
-    private var renderedTrackResets = 0
+    // the track drawn so far: that many points of the flight's track number trackResets; -1: none
+    private var renderedTrackResets = -1
+    private var renderedTrackSize = 0
+    private var events: AutoCloseable? = null
+    // debug builds: a replay to start once the data service is bound
+    private var pendingReplayFile: String? = null
     private var seekBarDragging = false
 
     private var fullscreenWindow = false
-
-
-    private var logPlayer : LogPlayer? = null;
 
     private var requestWritePermissionSequence = RequestWritePermissionSequenceType.NONE;
 
@@ -277,30 +275,41 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     private var lastSelectedBluetoothDeviceAddress = "";
     private var lastSelectedBLEDeviceAddress = "";
 
-    private var reconnectionStartTime = 0L;
     private var lastConnectionType = CONNTYPE_NONE;
-    private var lastBluetoothDevice: BluetoothDevice? = null;
-    private var reconnectOnFailure = false;
 
     private val serviceConnection: ServiceConnection = object : ServiceConnection {
         override fun onServiceDisconnected(p0: ComponentName?) {
-            onDisconnected()
+            events?.close()
+            events = null
+            dataService = null
+            switchToIdleState()
         }
 
         override fun onServiceConnected(p0: ComponentName?, p1: IBinder?) {
-            dataService = (p1 as DataService.DataBinder).getService()
-            dataService?.setDataListener(this@MapsActivity)
-            dataService?.let {
-                if (it.isConnected()) {
-                    switchToConnectedState()
-                    polyLine?.submitPoints(it.points)
+            val service = (p1 as DataService.DataBinder).getService()
+            dataService = service
+            events?.close()
+            events = service.operation.subscribeEvents(Executor { renderHandler.post(it) }) { onEvent(it) }
+            // a screen made again (rotation) takes up what the service is doing
+            when {
+                service.isConnected() -> switchToConnectedState()
+                service.replay != null -> enterReplayUi()
+                else -> pendingReplayFile?.let {
+                    pendingReplayFile = null
+                    startReplay(File(Environment.getExternalStoragePublicDirectory("TelemetryLogs"), it))
                 }
             }
             attachTerrain()
+            drawFlightPlans()
         }
     }
 
-    private val sensorTimeoutManager: SensorTimeoutManager = SensorTimeoutManager(this);
+    /** Stopped from the notification: nothing is left to show. */
+    private val stoppedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            finish()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -308,22 +317,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
         preferenceManager = PreferenceManager(this)
 
-        tts = TextToSpeech(this) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-        }
-
-        soundPool = SoundPool(5, AudioManager.STREAM_NOTIFICATION, 0)
-        connectedSoundId = soundPool!!.load(this, R.raw.connected, 1)
-        disconnectedSoundId = soundPool!!.load(this, R.raw.disconnected, 1)
-        connectionFailedSoundId = soundPool!!.load(this, R.raw.connection_failed, 1)
-        reconnectingSoundId = soundPool!!.load(this, R.raw.reconnecting, 1)
-
         mapType = preferenceManager.getMapType()
         followMode = savedInstanceState?.getBoolean("follow_mode", true) ?: true
-        replayFileString = savedInstanceState?.getString("replay_file_name")
         if (BuildConfig.DEBUG && savedInstanceState == null) {
             // debug builds: adb shell am start -n <package>/crazydude.com.telemetry.ui.MapsActivity --es debug_replay "<name>.tlm"
-            intent?.getStringExtra("debug_replay")?.let { replayFileString = it }
+            pendingReplayFile = intent?.getStringExtra("debug_replay")
         }
         fullscreenWindow = preferenceManager.isFullscreenWindow()
 
@@ -488,10 +486,10 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             val option7 = "Set takeoff point at UAV location"
 
             var options = arrayOf(option0, option1, option2, option3, option4, option5, option6)
-            if ( this.logPlayer == null) {
+            if (!isInReplayMode()) {
                 options = arrayOf(option0, option1)
             }
-            if (terrainMonitor?.isAvailable == true) {
+            if (dataService?.terrainMonitor?.isAvailable == true) {
                 options += option7
             }
 
@@ -522,7 +520,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
                         showSetPlaybackDurationDialog()
                     }
                     option7 -> {
-                        if (terrainMonitor?.setTakeoffHere() == true) {
+                        if (dataService?.terrainMonitor?.setTakeoffHere() == true) {
                             Toast.makeText(this, "Altitudes are now relative to the terrain at this point", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(this, "Location is unknown", Toast.LENGTH_SHORT).show()
@@ -534,25 +532,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
 
         playButton.setOnClickListener {
-            if ( this.logPlayer != null) {
-                if ( this.logPlayer?.isPlaying() == true) {
-                    this.logPlayer?.stop()
-                } else {
-                    this.logPlayer?.startPlayback()
-                }
-            }
+            dataService?.replay?.let { if (it.playing) it.pause() else it.play() }
         }
 
-        if (isInReplayMode()) {
-            startReplay(
-                File(
-                    Environment.getExternalStoragePublicDirectory("TelemetryLogs"),
-                    replayFileString
-                )
-            )
-        } else {
-            switchToIdleState()
-        }
+        switchToIdleState()
+        registerReceiver(stoppedReceiver, IntentFilter(DataService.ACTION_STOPPED))
 
         startDataService()
 
@@ -626,10 +610,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             updateCompassHeading(orientation)
         }
         polyLine = map?.addPolyline(preferenceManager.getRouteColor())
-        val p = dataService?.points;
-        if (p != null) {
-            polyLine?.submitPoints(p)
-        }
+        // the next render draws the flight's whole track on it
+        renderedTrackResets = -1
         homeLine = map?.addPolyline(2f, preferenceManager.getHomeLineColor())
         drawFlightPlans()
         showMyLocation()
@@ -690,7 +672,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             return
         }
         val drone = if (lastGPS.lat != 0.0 || lastGPS.lon != 0.0) lastGPS else return
-        val home = if (isInReplayMode()) replayHomeGPS else map?.getMyLocation()
+        val home = if (isInReplayMode()) replayHome else map?.getMyLocation()
         if (home == null) {
             if (line.size > 0) {
                 line.clear()
@@ -715,7 +697,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         flightPlanLabels.clear()
         if (!preferenceManager.isFlightPlansEnabled()) return
         val showNames = preferenceManager.isFlightPlanNamesEnabled()
-        val plans = FlightPlanManager(this).getPlans()
+        // the plans the data service has loaded into the environment
+        val plans = dataService?.operation?.read { _, environment -> environment.flightPlans } ?: FlightPlanManager(this).getPlans()
         for (plan in plans) {
             if (!plan.visible || plan.waypoints.size < 2) continue
             val line = map?.addPolyline(4f, preferenceManager.getFlightPlanColor(), *plan.waypoints.toTypedArray())
@@ -763,7 +746,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     private fun isInReplayMode(): Boolean {
-        return replayFileString != null
+        return dataService?.replay != null
     }
 
     private fun isIdle(): Boolean {
@@ -834,141 +817,95 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     private fun startReplay(file: File?) {
-        file?.also {
-            val progressDialog = ProgressDialog(this)
-            progressDialog.setCancelable(false)
-            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
-            progressDialog.max = 100
+        file ?: return
+        val service = dataService
+        if (service == null) {
+            pendingReplayFile = file.name
+            return
+        }
+        service.startReplay(file)
+        enterReplayUi()
+    }
 
-            progressDialog.getWindow().setFlags(
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            );
-            progressDialog.show();
-            if (!this.fullscreenWindow) {
-                progressDialog.getWindow().decorView.systemUiVisibility = 0
-            } else {
-                progressDialog.getWindow().decorView.systemUiVisibility =
-                    (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE)
-            }
-            progressDialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
-
-            switchToReplayMode()
-
-            replayFileString = it.name
-
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-            }
-
-            this.logPlayer = LogPlayer(this)
-
-            val context = this;
-
-            this.logPlayer?.load(file, object : LogPlayer.DataReadyListener {
-                override fun onUpdate(percent: Int) {
-                    progressDialog.progress = percent
-                }
-
-                override fun onDataReady(size: Int) {
+    /** Shows the replay the data service plays: its progress while it loads, then its controls. */
+    private fun enterReplayUi() {
+        val session = dataService?.replay ?: return
+        replayFileString = session.file.name
+        switchToReplayMode()
+        if (session.size >= 0) {
+            showReplayControls(session)
+            return
+        }
+        val progressDialog = ProgressDialog(this)
+        progressDialog.setCancelable(false)
+        progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL)
+        progressDialog.max = 100
+        progressDialog.window?.setFlags(
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        )
+        progressDialog.show()
+        progressDialog.window?.decorView?.systemUiVisibility = if (!this.fullscreenWindow) 0 else
+            (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE)
+        progressDialog.window?.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        val poll = object : Runnable {
+            override fun run() {
+                val current = dataService?.replay
+                if (current !== session || isDestroyed) {
                     progressDialog.dismiss()
-                    seekBar.max = size
-                    seekBar.visibility = View.VISIBLE
-                    playButton.visibility = View.VISIBLE
-                    seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(
-                            seekbar: SeekBar,
-                            position: Int,
-                            fromUser: Boolean
-                        ) {
-                            logPlayer?.seek(position)
-                        }
-
-                        override fun onStartTrackingTouch(p0: SeekBar?) {
-                            seekBarDragging = true
-                        }
-
-                        override fun onStopTrackingTouch(p0: SeekBar?) {
-                            seekBarDragging = false
-                        }
-                    })
-
-                    //rewind to first gps data to zoom on plane
-                    for (i in 0..seekBar.max - 1) {
-                        logPlayer?.seek(i)
-                        if (telemetryState.gpsFix && telemetryState.position != null && telemetryState.heading != null) {
-                            break;
-                        }
-                    }
-                    // creates the plane marker there, which zooms the map on it
-                    render()
-
-                    logPlayer?.seek(0);
+                    return
                 }
-
-                override fun onPlaybackPositionChange(prevPosition: Int, nextPosition: Int) {
-                    runOnUiThread {
-                        if ( (logPlayer?.currentPosition ?:0) == prevPosition ) {
-                            seekbar.progress = nextPosition
-                        }
-                    }
+                progressDialog.progress = session.loadPercent
+                if (session.size >= 0) {
+                    progressDialog.dismiss()
+                    showReplayControls(session)
+                } else {
+                    renderHandler.postDelayed(this, 100)
                 }
-
-                override fun onPlaybackStateChange( isPlaying : Boolean){
-                    runOnUiThread {
-                        if ( isPlaying) {
-                            playButton.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_pause));
-                        } else {
-                            playButton.setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_play));
-                        }
-                    }
-                }
-
-                override fun getTotalPlaybackDurationSec() : Int
-                {
-                    return preferenceManager.getPlaybackDuration()
-                }
-
-                override fun getPlaybackAutostart() : Boolean
-                {
-                    return preferenceManager.getPlaybackAutostart()
-                }
-
-                override fun onProtocolDetected(protocolName: String) {
-                    runOnUiThread {
-                        Toast.makeText(context, "Protocol: $protocolName", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            })
+            }
         }
+        poll.run()
     }
 
-    override fun onFlyModeData(
-        armed: Boolean,
-        heading: Boolean,
-        firstFlightMode: DataDecoder.Companion.FlyMode?,
-        secondFlightMode: DataDecoder.Companion.FlyMode?
-    ) {
-        telemetryState.update {
-            it.armed = armed
-            it.headingMode = heading
-            it.flyMode1 = firstFlightMode
-            it.flyMode2 = secondFlightMode
-        }
-        // a live flight is fed to the terrain monitor by the data service itself; a replay
-        // runs on the main thread, every change of the armed state counts
-        if (isInReplayMode()) runOnUiThread { terrainMonitor?.onArmedState(armed) }
+    private fun showReplayControls(session: ReplaySession) {
+        seekBar.max = session.size
+        seekBar.progress = session.position
+        seekBar.visibility = View.VISIBLE
+        playButton.visibility = View.VISIBLE
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekbar: SeekBar, position: Int, fromUser: Boolean) {
+                // the playback moves the bar too: only the user's moves are seeks
+                if (fromUser) dataService?.replay?.seek(position)
+            }
+
+            override fun onStartTrackingTouch(p0: SeekBar?) {
+                seekBarDragging = true
+            }
+
+            override fun onStopTrackingTouch(p0: SeekBar?) {
+                seekBarDragging = false
+            }
+        })
+        // the map goes to where the aircraft first has a fix
+        session.focus?.let { map?.moveCamera(it, 15f) }
     }
 
-    private fun modeText(v: TelemetryState.Values): String {
-        val armed = v.armed ?: return v.connectionStatus
-        val text = StringBuilder(if (armed) "Armed" else "Disarmed")
-        if (v.headingMode) text.append(" | Heading")
-        decodeMode(text, v.flyMode1)
-        decodeMode(text, v.flyMode2)
+
+    /** "Armed | Acro"..., or the state of the connection until the flight mode is known. */
+    private fun modeText(flight: FlightSnapshot?): String {
+        val mode = flight?.values?.flyMode ?: return when {
+            flight == null -> "Disconnected"
+            flight.kind == Flight.Kind.REPLAY -> "Replay"
+            flight.link == LinkStatus.CONNECTED -> "Connected"
+            flight.link == LinkStatus.LOST -> "Link lost"
+            flight.link == LinkStatus.FAILED -> "Link lost"
+            else -> "Connecting"
+        }
+        val text = StringBuilder(if (mode.armed) "Armed" else "Disarmed")
+        if (mode.heading) text.append(" | Heading")
+        decodeMode(text, mode.mode1)
+        decodeMode(text, mode.mode2)
+        if (flight.kind == Flight.Kind.LIVE && flight.link == LinkStatus.LOST) text.append(" | Link lost")
         return text.toString()
     }
 
@@ -1096,7 +1033,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         super.onSaveInstanceState(outState)
         map?.onSaveInstanceState(outState)
         outState?.putBoolean("follow_mode", followMode)
-        outState?.putString("replay_file_name", replayFileString)
         preferenceManager.setFullscreenWindow(fullscreenWindow)
     }
 
@@ -1122,7 +1058,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         bottomList.removeAllViews()
         sensorsSettings.forEach {
             val sensorView = sensorViewMap[it.name]
-            val usable = terrainMonitor?.isAvailable == true || it.name !in PreferenceManager.terrainSensors
+            val usable = dataService?.terrainMonitor?.isAvailable == true || it.name !in PreferenceManager.terrainSensors
             sensorView?.visibility = if (it.shown && usable) View.VISIBLE else View.GONE
             if (it.position == "top") {
                 topList.addView(sensorView)
@@ -1250,8 +1186,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     override fun onResume() {
         super.onResume()
+        // settings (traffic, flight plans...) may have changed while away
+        dataService?.reloadSettings()
         map?.onResume()
-        this.sensorTimeoutManager.resume();
         updateWindowFullscreenDecoration()
         updateScreenOrientation()
         drawFlightPlans()
@@ -1259,20 +1196,17 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         applySensorScale()
         // Settings (height limit, altitude reference, antenna) may have changed while away
         reloadTerrainIfChanged()
-        updateTerrainAntenna()
+        dataService?.terrainMonitor?.requestUpdate()
         if (checkCallingOrSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 1f, phoneLocationListener)
         }
-        startFr24()
     }
 
     override fun onPause() {
         super.onPause()
         map?.onPause()
-        this.sensorTimeoutManager.pause();
-        this.logPlayer?.stop();
-        stopFr24()
+        dataService?.replay?.pause()
         updateFullscreenState()//check if user has brought system ui with swipe
         val lm = getSystemService(LOCATION_SERVICE) as LocationManager
         lm.removeUpdates(phoneLocationListener)
@@ -1283,8 +1217,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         started = false
         detachTerrain()
         map?.onStop()
-        this.logPlayer?.stop();
-        this.sensorTimeoutManager.pause();
+        dataService?.replay?.pause()
     }
 
     private fun connectBluetooth() {
@@ -1576,12 +1509,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     private fun resetUI() {
-        telemetryState.update { it.connectionStatus = "Disconnected" }
-        telemetryState.restart()
         phoneBattery.text = "-"
         render()
-        // only the readouts: the flight itself is kept by the data service across a lost link
-        onTerrainState(TerrainMonitor.EMPTY_STATE)
     }
 
     private fun bleCheck() =
@@ -1598,40 +1527,14 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         else {
             lastConnectionType = CONNTYPE_BT;
         }
-        reconnectionStartTime = 0;
-        reconnectOnFailure = false;
-
         startDataService()
         dataService?.let {
             connectButton.text = getString(R.string.connecting)
             connectButton.isEnabled = false
-            lastBluetoothDevice = device;
             it.connect(device, isBLE)
         }
     }
 
-    private fun reconnectToBluetoothDevice() {
-        if (
-            (lastBluetoothDevice != null) &&
-            ( (lastConnectionType == CONNTYPE_BT) || (lastConnectionType == CONNTYPE_BLE))
-        ) {
-            if ( preferenceManager.getConnectionVoiceMessagesEnabled()) {
-                soundPool!!.play(reconnectingSoundId, 1f, 1f, 0, 0, 1f)
-            }
-
-        startDataService()
-        dataService?.let {
-            connectButton.text = getString(R.string.reconnecting)
-            connectButton.isEnabled = false
-            // the same flight goes on: the data service keeps what it knows about it
-            if ( lastConnectionType == CONNTYPE_BLE) {
-                it.connect(lastBluetoothDevice as BluetoothDevice, true, newSession = false)
-                } else if (lastConnectionType == CONNTYPE_BT) {
-                it.connect(lastBluetoothDevice as BluetoothDevice, false, newSession = false)
-            }
-        }
-    }
-    }
 
     private fun connectToUSBDevice(
         port: UsbSerialPort,
@@ -1649,9 +1552,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     override fun onDestroy() {
         super.onDestroy()
         renderHandler.removeCallbacks(renderTask)
-        tts?.shutdown()
-        tts = null
-        ttsReady = false
+        events?.close()
+        events = null
+        unregisterReceiver(stoppedReceiver)
         headingPolyline = null;
         polyLine = null;
         homeLine = null
@@ -1660,13 +1563,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         flightPlanLabels.clear()
         detachTerrain()
         map?.onDestroy()
-        if (!isChangingConfigurations) {
-            dataService?.setDataListener(null)
-        } else {
-            // The new screen sets itself as the listener once it is bound. Until then the data
-            // must not come here: this screen's map is gone (a crash in updateHomeLine)
-            dataService?.removeDataListener(this)
-        }
+        // the data service goes on without a screen (traffic warnings, the flight); it ends
+        // from its notification
         map = null;
         this.unregisterReceiver(this.batInfoReceiver)
         unbindService(serviceConnection)
@@ -1740,29 +1638,24 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onVSpeedData(vspeed: Float) {
-        this.sensorTimeoutManager.onVSpeedData(vspeed);
-        telemetryState.update { it.vSpeed = vspeed }
-    }
 
-    override fun onThrottleData(throttle: Int) {
-        this.sensorTimeoutManager.onThrottleData(throttle);
-        telemetryState.update { it.throttle = throttle }
-    }
 
     /**
      * The render rate: the telemetry comes much faster than it is worth redrawing the screen.
      * A replay being played or scrubbed is drawn at the rate the player steps.
      */
     private fun renderIntervalMs(): Long {
-        val replayMoving = isInReplayMode() && (logPlayer?.isPlaying() == true || seekBarDragging)
+        val replayMoving = dataService?.replay?.let { it.playing || seekBarDragging } ?: false
         return if (replayMoving) 50L else 333L
     }
 
     /** Draws the telemetry state: the readouts, the aircraft and its track. */
+    /** Draws the flight operation: the readouts, the aircraft and its track, the traffic, the terrain. */
     private fun render() {
-        val snapshot = telemetryState.snapshot()
-        val v = snapshot.values
+        val operation = dataService?.operation
+        val flight = operation?.read { f, _ -> f?.snapshot(renderedTrackResets, renderedTrackSize) }
+        val environment = operation?.read { _, e -> e.snapshot() }
+        val v = flight?.values ?: FlightValues()
 
         satellites.text = v.satellites?.let { if (it == 99) "ES" else it.toString() } ?: "0"
         rssi.text = v.rssi?.let { if (it == -1) "-" else it.toString() } ?: "-"
@@ -1783,10 +1676,14 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         ant.text = v.antenna?.let { (it + 1).toString() } ?: "-"
         power.text = v.power?.let { powerText(it) } ?: "-"
 
-        voltage.text = v.voltage?.let { "${"%.2f".format(it)} V" } ?: "-"
-        cell_voltage.text = v.cellVoltage?.let { "${"%.2f".format(it)} V" } ?: "-"
+        // "Voltage reported by telemetry": the battery's or a cell's
+        val reportsBattery = preferenceManager.getReportVoltage() == "Battery"
+        val batteryVoltage = if (reportsBattery) v.vbatOrCell ?: v.voltage else v.voltage
+        val cellVoltage = if (reportsBattery) v.cellVoltage else v.vbatOrCell ?: v.cellVoltage
+        voltage.text = batteryVoltage?.let { "${"%.2f".format(it)} V" } ?: "-"
+        cell_voltage.text = cellVoltage?.let { "${"%.2f".format(it)} V" } ?: "-"
         current.text = v.current?.let { "${"%.2f".format(it)} A" } ?: "-"
-        renderFuel(v)
+        renderFuel(v.fuel, cellVoltage)
 
         speed.text = v.speed?.let { "${it.roundToInt()} km/h" } ?: "-"
         airspeed.text = v.airSpeed?.let { "${it.roundToInt()} km/h" } ?: "-"
@@ -1794,31 +1691,115 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         altitude.text = v.altitude?.let { formatHeight(it) } ?: "-"
         altitude_msl.text = v.gpsAltitude?.let { formatHeight(it) } ?: "-"
         distance.text = v.distance?.let { formatDistance(it.toFloat()) } ?: "-"
-        traveled_distance.text = formatDistance(v.traveledDistance.toFloat())
+        traveled_distance.text = formatDistance((flight?.traveledDistance ?: 0.0).toFloat())
         throttle.text = v.throttle?.toString() ?: "-"
 
-        val rate = v.telemetryRate ?: 0
+        val rate = flight?.telemetryRate ?: 0
         tlmRate.text = if (rate < 1000) "$rate b/s" else "${"%.1f".format(rate / 1000f)} kb/s"
-        statustext.text = v.statusText ?: ""
-        mode.text = modeText(v)
+        val stale = if (flight?.kind == Flight.Kind.LIVE) flight.stale else emptySet()
+        statustext.text = if (Sensor.STATUSTEXT in stale) "" else v.statusText ?: ""
+        mode.text = modeText(flight)
         horizonView.setRoll(v.roll ?: 0f)
         horizonView.setPitch(v.pitch ?: 0f)
         v.rcChannels?.let { rc_widget.setChannels(it) }
+        renderStale(stale)
+        tlmRate.alpha = if (flight?.kind == Flight.Kind.REPLAY) 0.5f else 1f
 
-        renderAircraft(snapshot)
+        renderAircraft(flight)
+        renderTerrain(flight?.terrain ?: TerrainMonitor.EMPTY_STATE)
+        renderTraffic(environment?.traffic ?: emptyList())
+        renderReplay()
     }
 
-    private fun renderAircraft(snapshot: TelemetryState.Snapshot) {
-        val v = snapshot.values
-        hasGPSFix = v.gpsFix
-        if (snapshot.trackResets != renderedTrackResets) {
-            renderedTrackResets = snapshot.trackResets
-            polyLine?.clear()
+    /** Readouts whose values have not come for a while are greyed. */
+    private fun renderStale(stale: Set<Sensor>) {
+        sensorViews.forEach { (sensor, views) ->
+            val alpha = if (sensor in stale) 0.5f else 1f
+            views.forEach { it.alpha = alpha }
         }
-        if (snapshot.newTrackPoints.isNotEmpty()) polyLine?.submitPoints(snapshot.newTrackPoints)
+    }
+
+    private val sensorViews: Map<Sensor, List<View>> by lazy {
+        mapOf(
+            Sensor.GPS to listOf(satellites, traveled_distance),
+            Sensor.DISTANCE to listOf<View>(distance),
+            Sensor.ALTITUDE to listOf<View>(altitude),
+            Sensor.GPS_ALTITUDE to listOf<View>(altitude_msl),
+            Sensor.RSSI to listOf<View>(rssi),
+            Sensor.UP_LQ to listOf<View>(upLq),
+            Sensor.DN_LQ to listOf<View>(dnLq),
+            Sensor.ELRS_MODE to listOf<View>(elrsRate),
+            Sensor.VOLTAGE to listOf<View>(voltage),
+            Sensor.CELL_VOLTAGE to listOf<View>(cell_voltage),
+            Sensor.CURRENT to listOf<View>(current),
+            Sensor.SPEED to listOf<View>(speed),
+            Sensor.AIRSPEED to listOf<View>(airspeed),
+            Sensor.VSPEED to listOf<View>(vspeed),
+            Sensor.THROTTLE to listOf<View>(throttle),
+            Sensor.FUEL to listOf<View>(fuel),
+            Sensor.RC_CHANNELS to listOf<View>(rc_widget),
+            Sensor.DN_SNR to listOf<View>(dnSnr),
+            Sensor.UP_SNR to listOf<View>(upSnr),
+            Sensor.ANT to listOf<View>(ant),
+            Sensor.POWER to listOf<View>(power),
+            Sensor.RSSI_DBM_1 to listOf<View>(rssiDbm1),
+            Sensor.RSSI_DBM_2 to listOf<View>(rssiDbm2),
+            Sensor.RSSI_DBM_D to listOf<View>(rssiDbmd)
+        )
+    }
+
+    /** The replay's seek bar and play button follow the playback. */
+    private fun renderReplay() {
+        val session = dataService?.replay ?: return
+        if (session.size < 0) return
+        if (!seekBarDragging && seekBar.progress != session.position) seekBar.progress = session.position
+        val icon = if (session.playing) R.drawable.ic_pause else R.drawable.ic_play
+        if (playButton.tag != icon) {
+            playButton.tag = icon
+            playButton.setImageDrawable(ContextCompat.getDrawable(this, icon))
+        }
+    }
+
+    private fun onEvent(event: Event) {
+        when (event) {
+            is Event.Connected -> {
+                Toast.makeText(this, "Connected!", Toast.LENGTH_SHORT).show()
+                switchToConnectedState()
+            }
+            is Event.Disconnected -> {
+                Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show()
+                switchToIdleState()
+            }
+            is Event.LinkLost -> Toast.makeText(this, "Link lost", Toast.LENGTH_SHORT).show()
+            is Event.Reconnecting -> Toast.makeText(this, "Reconnecting", Toast.LENGTH_SHORT).show()
+            is Event.ConnectionFailed -> {
+                Toast.makeText(this, "Connection failed", Toast.LENGTH_SHORT).show()
+                // a first connection that never came up: nothing to show
+                if (dataService?.isConnected() != true) switchToIdleState()
+            }
+            is Event.ProtocolDetected -> Toast.makeText(this, "Protocol: ${event.name}", Toast.LENGTH_SHORT).show()
+            is Event.TrafficWarning -> Toast.makeText(this, Alerts.shortWarning(event), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun renderAircraft(flight: FlightSnapshot?) {
+        val v = flight?.values
+        hasGPSFix = v?.gpsFix ?: false
+        replayHome = flight?.home
+        if (flight == null) {
+            if (renderedTrackResets != -1) polyLine?.clear()
+            renderedTrackResets = -1
+            renderedTrackSize = 0
+        } else {
+            // a new track, or a screen that has not drawn this one yet: from its start
+            if (flight.trackResets != renderedTrackResets || flight.newPointsFrom == 0) polyLine?.clear()
+            if (flight.newPoints.isNotEmpty()) polyLine?.submitPoints(flight.newPoints)
+            renderedTrackResets = flight.trackResets
+            renderedTrackSize = flight.trackSize
+        }
         commitRouteLinePoints()
 
-        val position = v.position
+        val position = v?.position
         if (position == null) {
             lastGPS = Position(0.0, 0.0)
         } else if (position != lastGPS) {
@@ -1833,10 +1814,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             } else {
                 this.map?.invalidate()
             }
-            fr24Manager?.updateDronePosition(position.lat, position.lon)
-            terrainMonitor?.onAntennaPosition(antennaPosition())
         }
-        val heading = v.heading
+        val heading = v?.heading
         if (heading != null && heading != lastHeading) {
             lastHeading = heading
             marker?.rotation = heading
@@ -1845,8 +1824,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         tryCreateMarker()
     }
 
-    private fun renderFuel(v: TelemetryState.Values) {
-        val fuel = v.fuel
+    private fun renderFuel(fuel: Int?, cellVoltage: Float?) {
         if (fuel == null) {
             this.fuel.text = "-"
             setFuelIcon(-1)
@@ -1858,9 +1836,9 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             "mAh", "mWh" -> {
                 this.fuel.text = this.formatPower(fuel, batteryUnits)
                 //for icon, calculate percentage from cell voltage if available
-                val cellVoltage = v.cellVoltage ?: 0f
-                percentage = if ((cellVoltage > 0) && (cellVoltage <= 4.4)) {
-                    ((1 - (4.2f - cellVoltage)).coerceIn(0f, 1f) * 100).toInt()
+                val cell = cellVoltage ?: 0f
+                percentage = if ((cell > 0) && (cell <= 4.4)) {
+                    ((1 - (4.2f - cell)).coerceIn(0f, 1f) * 100).toInt()
                 } else {
                     -1  //unknown icon
                 }
@@ -1926,57 +1904,15 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onAltitudeData(altitude: Float) {
-        this.sensorTimeoutManager.onAltitudeData(altitude);
-        telemetryState.update { it.altitude = altitude }
-        if (isInReplayMode()) runOnUiThread { terrainMonitor?.onAltitude(altitude) }
-    }
 
-    override fun onGPSAltitudeData(altitude: Float) {
-        this.sensorTimeoutManager.onGPSAltitudeData(altitude);
-        telemetryState.update { it.gpsAltitude = altitude }
-    }
 
-    override fun onDistanceData(distance: Int) {
-        this.sensorTimeoutManager.onDistanceData(distance);
-        telemetryState.update { it.distance = distance }
-    }
 
-    override fun onRollData(rollAngle: Float) {
-        telemetryState.update { it.roll = rollAngle }
-    }
 
-    override fun onPitchData(pitchAngle: Float) {
-        telemetryState.update { it.pitch = pitchAngle }
-    }
 
-    override fun onGSpeedData(speed: Float) {
-        this.sensorTimeoutManager.onGSpeedData(speed);
-        telemetryState.update { it.speed = speed }
-    }
 
-    override fun onAirSpeedData(speed: Float) {
-        this.sensorTimeoutManager.onAirSpeedData(speed);
-        telemetryState.update { it.airSpeed = speed }
-    }
 
-    override fun onRCChannels(rcChannels: IntArray) {
-        this.sensorTimeoutManager.onRCChannels(rcChannels)
-        telemetryState.setRcChannels(rcChannels)
-    }
 
-    override fun onStatusText(message: String) {
-        this.sensorTimeoutManager.onStatusText(message);
-        telemetryState.update { it.statusText = message }
-    }
 
-    override fun onGPSState(satellites: Int, gpsFix: Boolean) {
-        this.sensorTimeoutManager.onGPSState(satellites, gpsFix)
-        telemetryState.update {
-            it.satellites = satellites
-            it.gpsFix = gpsFix
-        }
-    }
 
     //should be called on ui thread
     fun tryCreateMarker() {
@@ -2164,40 +2100,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onRSSIData(rssi: Int) {
-        this.sensorTimeoutManager.onRSSIData(rssi);
-        telemetryState.update { it.rssi = rssi }
-    }
 
-    override fun onUpLqData(lq: Int) {
-        this.sensorTimeoutManager.onUpLqData(lq);
-        telemetryState.update { it.upLq = lq }
-    }
 
-    override fun onDnLqData(lq: Int) {
-        this.sensorTimeoutManager.onDnLqData(lq);
-        telemetryState.update { it.dnLq = lq }
-    }
 
-    override fun onRssiDbm1Data(rssi: Int) {
-        this.sensorTimeoutManager.onRssiDbm1Data(rssi);
-        telemetryState.update { it.rssiDbm1 = rssi }
-    }
 
-    override fun onRssiDbm2Data(rssi: Int) {
-        this.sensorTimeoutManager.onRssiDbm2Data(rssi);
-        telemetryState.update { it.rssiDbm2 = rssi }
-    }
 
-    override fun onRssiDbmdData(rssi: Int) {
-        this.sensorTimeoutManager.onRssiDbmdData(rssi);
-        telemetryState.update { it.rssiDbmd = rssi }
-    }
 
-    override fun onElrsModeModeData(mode: Int) {
-        this.sensorTimeoutManager.onElrsModeModeData(mode);
-        telemetryState.update { it.elrsMode = mode }
-    }
 
 
     private fun showMapTypeSelectorDialog() {
@@ -2224,53 +2132,14 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         this.showDialog(fMapTypeDialog);
     }
 
-    override fun onVBATData(voltage: Float) {
-        this.sensorTimeoutManager.onVBATData(voltage);
-        telemetryState.update { it.voltage = voltage }
-    }
 
-    override fun onCellVoltageData(voltage: Float) {
-        telemetryState.update { it.cellVoltage = voltage }
-    }
 
-    override fun onVBATOrCellData(voltage: Float) {
-        if (preferenceManager.getReportVoltage() == "Battery") {
-            this.sensorTimeoutManager.onVBATData(voltage)
-            telemetryState.update { it.voltage = voltage }
-        } else {
-            this.sensorTimeoutManager.onCellVoltageData(voltage)
-            telemetryState.update { it.cellVoltage = voltage }
-        }
-    }
 
-    override fun onCurrentData(current: Float) {
-        this.sensorTimeoutManager.onCurrentData(current);
-        telemetryState.update { it.current = current }
-    }
 
-    override fun onDNSNRData(snr: Int) {
-        this.sensorTimeoutManager.onDNSNRData(snr);
-        telemetryState.update { it.dnSnr = snr }
-    }
 
-    override fun onUPSNRData(snr: Int) {
-        this.sensorTimeoutManager.onUPSNRData(snr);
-        telemetryState.update { it.upSnr = snr }
-    }
 
-    override fun onAntData(activeAntena: Int) {
-        this.sensorTimeoutManager.onAntData(activeAntena);
-        telemetryState.update { it.antenna = activeAntena }
-    }
 
-    override fun onPowerData(power: Int) {
-        this.sensorTimeoutManager.onPowerData(power);
-        telemetryState.update { it.power = power }
-    }
 
-    override fun onHeadingData(heading: Float) {
-        telemetryState.update { it.heading = heading }
-    }
 
     private fun updateHeading() {
         if (lastGPS.lat != 0.0 && lastGPS.lon != 0.0) {
@@ -2282,42 +2151,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onDisconnected() {
-        runOnUiThread {
-            Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show()
-            switchToIdleState()
 
-            if (preferenceManager.getConnectionVoiceMessagesEnabled()) {
-                soundPool!!.play(disconnectedSoundId, 1f, 1f, 0, 0, 1f)
-            }
-
-            reconnectOnFailure = true;
-            tryReconnect()
-        }
-    }
-
-    fun tryReconnect() {
-        if (!preferenceManager.getReconnectionEnabled()) {
-            return;
-        }
-
-        runOnUiThread {
-            if ((lastConnectionType == CONNTYPE_BT) || (lastConnectionType == CONNTYPE_BLE)) {
-                if (reconnectionStartTime == 0L) {
-                    reconnectionStartTime = System.currentTimeMillis()
-                }
-
-                if ((System.currentTimeMillis() - reconnectionStartTime) < 21000) {
-                    AsyncTask.execute {
-                        Thread.sleep(5000)
-                            runOnUiThread {
-                                reconnectToBluetoothDevice()
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
     private fun switchToReplayMode() {
         setFollowMode(true);
@@ -2328,27 +2162,19 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         replayButton.setImageDrawable(ContextCompat.getDrawable(this, R.drawable.ic_close))
         replayButton.setOnClickListener {
             lastConnectionType = CONNTYPE_NONE; //reset last connection type to skip reconnection
+            dataService?.closeReplay()
             switchToIdleState()
             replayFileString = null
         }
-        this.sensorTimeoutManager.disableTimeouts()
-        this.tlmRate.setAlpha(0.5f);
-        telemetryState.restart()
         lastGPS = Position(0.0, 0.0);
-        replayHomeGPS = null
         hasGPSFix = false;
         marker?.remove()
         marker = null
         headingPolyline?.remove()
         headingPolyline = null
-        // a replay is a flight session of its own
-        val monitor = terrainMonitor
-        if (monitor != null) monitor.reset() else terrainResetPending = true
     }
 
     private fun switchToIdleState() {
-        this.logPlayer?.stop();
-        this.logPlayer = null;
         resetUI()
         menuButton.hide()
         seekBar.visibility = View.GONE
@@ -2369,10 +2195,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         polyLine?.clear()
         headingPolyline?.remove()
         headingPolyline = null;
-        this.sensorTimeoutManager.enableTimeouts()
-        this.tlmRate.setAlpha(1.0f);
         lastGPS = Position(0.0, 0.0)
-        replayHomeGPS = null
+        replayHome = null
         homeLine?.clear()
         showLosBlocked()
         map?.invalidate()
@@ -2383,7 +2207,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         menuButton.show()
         connectButton.text = getString(R.string.disconnect)
         connectButton.isEnabled = true
-        telemetryState.update { it.connectionStatus = "Connected" }
         connectButton.setOnClickListener {
             connectButton.isEnabled = false
             connectButton.text = getString(R.string.disconnecting)
@@ -2392,24 +2215,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onConnectionFailed() {
-        runOnUiThread {
-            Toast.makeText(this, "Connection failed", Toast.LENGTH_SHORT).show()
-            connectButton.text = getString(R.string.connect)
-            telemetryState.update { it.connectionStatus = "Disconnected" }
-            connectButton.isEnabled = true
-            connectButton.setOnClickListener {
-                connect()
-            }
-            if (preferenceManager.getConnectionVoiceMessagesEnabled()) {
-                soundPool!!.play(connectionFailedSoundId, 1f, 1f, 0, 0, 1f)
-            }
-
-            if ( reconnectOnFailure ) {
-                tryReconnect()
-            }
-        }
-    }
 
     private fun setFuelIcon(percentage: Int) {
         when (percentage) {
@@ -2452,72 +2257,15 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onFuelData(fuel: Int) {
-        this.sensorTimeoutManager.onFuelData(fuel);
-        telemetryState.update { it.fuel = fuel }
-    }
 
 
-    override fun onTelemetryByte() {
-        this.sensorTimeoutManager.onTelemetryByte()
-    }
 
-    override fun onSuccessDecode() {
-        this.sensorTimeoutManager.onSuccessDecode()
-    }
 
-    override fun onDecoderRestart() {
-        telemetryState.restart()
-        // replay: the flight is played again from its start. A live decoder restarts when a
-        // connection is made, the data service decides whether that is a new flight
-        if (isInReplayMode()) runOnUiThread { terrainMonitor?.reset() }
-    }
 
-    override fun onProtocolDetected( protocolName: String) {
-        runOnUiThread {
-            Toast.makeText(this, "Protocol: $protocolName", Toast.LENGTH_SHORT).show()
-        }
-    }
 
-    override fun commit() {
-        // the track is drawn by render()
-    }
 
-    override fun onGPSData(list: List<Position>, addToEnd: Boolean) {
-        this.sensorTimeoutManager.onGPSData(list, addToEnd);
-        telemetryState.onPositions(list, addToEnd)
-        if (isInReplayMode() && list.isNotEmpty()) runOnUiThread {
-            if (telemetryState.gpsFix) {
-                if (replayHomeGPS == null) {
-                    // LogPlayer delivers replay positions only through this method, in recorded
-                    // order, and only with a GPS fix: the first one is where the flight started.
-                    replayHomeGPS = list[0]
-                }
-                //the first point of a rebuilt track is where the flight has started
-                terrainMonitor?.onAircraftPosition(list[0].lat, list[0].lon)
-                terrainMonitor?.onAircraftPosition(list.last().lat, list.last().lon)
-            }
-        }
-    }
 
-    override fun onGPSData(latitude: Double, longitude: Double) {
-        this.sensorTimeoutManager.onGPSData(latitude, longitude);
-        val changed = telemetryState.onPosition(Position(latitude, longitude))
-        if (changed && isInReplayMode()) runOnUiThread { terrainMonitor?.onAircraftPosition(latitude, longitude) }
-    }
 
-    override fun onConnected() {
-        runOnUiThread {
-            reconnectionStartTime = 0L;
-            Toast.makeText(this, "Connected!", Toast.LENGTH_SHORT).show()
-            switchToConnectedState()
-            telemetryState.restart()
-
-            if (preferenceManager.getConnectionVoiceMessagesEnabled()) {
-                soundPool!!.play(connectedSoundId, 1f, 1f, 0, 0, 1f)
-            }
-        }
-    }
 
     private fun updateHorizonViewSize() {
         var size = 96.0f;
@@ -2577,108 +2325,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     //SensorTimeoutListener
-    private fun updateSetSensorGrayed(sensorId: Int) {
-        var alpha = 1f;
-        if (this.sensorTimeoutManager.getSensorTimeout(sensorId)) alpha = 0.5f;
-        when (sensorId) {
-            SensorTimeoutManager.SENSOR_GPS -> {
-                this.satellites.setAlpha(alpha);
-                this.traveled_distance.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_DISTANCE -> {
-                this.distance.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_ALTITUDE -> {
-                this.altitude.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_GPS_ALTITUDE -> {
-                this.altitude_msl.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_RSSI -> {
-                this.rssi.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_UP_LQ -> {
-                this.upLq.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_DN_LQ -> {
-                this.dnLq.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_ELRS_MODE -> {
-                this.elrsRate.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_VOLTAGE -> {
-                this.voltage.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_CELL_VOLTAGE -> {
-                this.cell_voltage.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_CURRENT -> {
-                this.current.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_SPEED -> {
-                this.speed.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_AIRSPEED -> {
-                this.airspeed.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_VSPEED -> {
-                this.vspeed.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_THROTTLE -> {
-                this.throttle.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_FUEL -> {
-                this.fuel.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_RC_CHANNELS -> {
-                this.rc_widget.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_STATUSTEXT -> {
-                if (this.sensorTimeoutManager.getSensorTimeout(sensorId)) {
-                    telemetryState.update { it.statusText = "" }
-                }
-            }
-            SensorTimeoutManager.SENSOR_DN_SNR -> {
-                this.dnSnr.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_UP_SNR -> {
-                this.upSnr.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_ANT -> {
-                this.ant.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_POWER -> {
-                this.power.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_RSSI_DBM_1 -> {
-                this.rssiDbm1.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_RSSI_DBM_2 -> {
-                this.rssiDbm2.setAlpha(alpha);
-            }
-            SensorTimeoutManager.SENSOR_RSSI_DBM_D -> {
-                this.rssiDbmd.setAlpha(alpha);
-            }
-        }
-    }
 
     //SensorTimeoutListener
-    override fun onSensorTimeout(sensorId: Int) {
-        runOnUiThread {
-            this.updateSetSensorGrayed(sensorId);
-        }
-    }
 
     //SensorTimeoutListener
-    override fun onSensorData(sensorId: Int) {
-        runOnUiThread {
-            this.updateSetSensorGrayed(sensorId);
-        }
-    }
 
-    override fun onTelemetryRate(rate: Int) {
-        telemetryState.update { it.telemetryRate = rate }
-    }
 
     fun setFollowMode(mode: Boolean) {
         followMode = mode;
@@ -2763,11 +2414,27 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             val currentFileCSV = File(Environment.getExternalStoragePublicDirectory("TelemetryLogs"), csvFileName)
             currentFileCSV.delete();
 
+            dataService?.closeReplay()
             switchToIdleState()
             replayFileString = null
         } else {
             Toast.makeText(this, "Failed to delete log.", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** Exports run off the main thread: a long flight takes a while. */
+    private fun exportInBackground(fileName: String, export: (LogPlayer) -> Unit) {
+        val player = dataService?.replay?.player ?: return
+        val appContext = applicationContext
+        Thread {
+            val message = try {
+                export(player)
+                "$fileName saved"
+            } catch (e: Exception) {
+                "Cannot save $fileName: ${e.message}"
+            }
+            renderHandler.post { Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show() }
+        }.start()
     }
 
     fun replaceExtension(fileName: String, newExtension : String): String {
@@ -2780,11 +2447,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     fun showExportGPXDialog() {
-        this.logPlayer?.stop();
+        dataService?.replay?.pause()
         if (!requestWritePermission(RequestWritePermissionSequenceType.EXPORT_GPX)) return;
 
         val editText = EditText(this)
-        editText.setText(this.logPlayer?.launchPointMSLAltitude.toString())
+        editText.setText(dataService?.replay?.player?.launchPointMSLAltitude.toString())
         editText.inputType = InputType.TYPE_CLASS_NUMBER
         editText.filters = arrayOf(InputFilter.LengthFilter(10)) // Set maximum input length, if needed
         editText.setSelection(editText.text.length)
@@ -2796,8 +2463,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             val enteredNumber = editText.text.toString().toFloatOrNull()
             if (enteredNumber != null) {
                 val fileName = replaceExtension( replayFileString?:"", ".gpx")
-                this.logPlayer?.exportGPX(fileName, enteredNumber)
-                Toast.makeText(this, fileName + " saved", Toast.LENGTH_SHORT).show()
+                exportInBackground(fileName) { player -> player.exportGPX(fileName, enteredNumber) }
             }
             dialog.dismiss()
         }
@@ -2807,7 +2473,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     }
 
     fun showExportKMLDialog1() {
-        this.logPlayer?.stop();
+        dataService?.replay?.pause()
         if (!requestWritePermission(RequestWritePermissionSequenceType.EXPORT_KML)) return;
 
         val option1 = "Clamp to ground";
@@ -2823,14 +2489,13 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
             val selectedOption = options[which]
             when (selectedOption) {
                 option1 -> {
-                    this.logPlayer?.exportKML(fileName, 0.0f, "clampToGround" )
-                    Toast.makeText(this, fileName + " saved", Toast.LENGTH_SHORT).show()
+                    exportInBackground(fileName) { player -> player.exportKML(fileName, 0.0f, "clampToGround" ) }
                 }
                 option2 -> {
                     this.showExportKMLDialog2(fileName, "relativeToGround","Adjust track altitude, m:", 0)
                 }
                 option3 -> {
-                    this.showExportKMLDialog2(fileName, "absolute","Enter launch point MSL altitude, m:", this.logPlayer?.launchPointMSLAltitude?:0)
+                    this.showExportKMLDialog2(fileName, "absolute","Enter launch point MSL altitude, m:", dataService?.replay?.player?.launchPointMSLAltitude?:0)
                 }
             }
             dialog.dismiss()
@@ -2850,8 +2515,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         .setPositiveButton("OK") { dialog: DialogInterface, which: Int ->
             val enteredNumber = editText.text.toString().toFloatOrNull()
             if (enteredNumber != null) {
-                this.logPlayer?.exportKML(fileName, enteredNumber,altitudeMode)
-                Toast.makeText(this, fileName + " saved", Toast.LENGTH_SHORT).show()
+                exportInBackground(fileName) { player -> player.exportKML(fileName, enteredNumber,altitudeMode) }
             }
             dialog.dismiss()
         }
@@ -2870,9 +2534,11 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         .setItems(options) { dialog: DialogInterface, which: Int ->
             val v = options_values[which].toInt();
             preferenceManager.setPlaybackDuration(v)
-            if ( this.logPlayer?.isPlaying() ?: false ) {
-                this.logPlayer?.stop();
-                this.logPlayer?.startPlayback();
+            dataService?.replay?.let {
+                if (it.playing) {
+                    it.pause()
+                    it.play()
+                }
             }
             Toast.makeText(this, "Duration changed", Toast.LENGTH_SHORT).show()
             dialog.dismiss()
@@ -2898,22 +2564,12 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
 
     // --- FlightRadar24 nearby aircraft ---
 
-    private fun startFr24() {
-        if (preferenceManager.isFr24Enabled()) {
-            fr24Manager = Fr24Manager(preferenceManager, this)
-            fr24Manager?.start { map?.getMyLocation() }
-        }
-    }
 
-    private fun stopFr24() {
-        fr24Manager?.stop()
-        fr24Manager = null
-        airplaneMarkers.values.forEach { it.remove() }
-        airplaneMarkers.clear()
-        map?.invalidate()
-    }
 
-    override fun onAirplanesUpdated(airplanes: List<Fr24Manager.AirplaneInfo>) {
+    /** The aircraft around the pilot, redrawn when FlightRadar24 brings a new list. */
+    private fun renderTraffic(airplanes: List<Aircraft>) {
+        if (airplanes === trafficShown) return
+        trafficShown = airplanes
         val currentIds = airplanes.map { it.flightId }.toSet()
 
         // Remove stale markers
@@ -2958,34 +2614,8 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         map?.invalidate()
     }
 
-    override fun onProximityWarning(
-        airplane: Fr24Manager.AirplaneInfo,
-        distanceMeters: Double,
-        directionDeg: Double
-    ) {
-        val cardinal = bearingToCardinal(directionDeg)
-        val distKm = distanceMeters / 1000.0
-        val msg = "TRAFFIC: ${airplane.displayName} ${"%.1f".format(distKm)}km $cardinal, alt ${airplane.altMeters}m"
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
-        if (ttsReady) {
-            val spokenDir = bearingToSpoken(directionDeg)
-            val speech = "Traffic, ${spokenDir}, ${"%.1f".format(distKm)} kilometers, altitude ${airplane.altMeters} meters"
-            tts?.speak(speech, TextToSpeech.QUEUE_ADD, null, "fr24_warning_${airplane.flightId}")
-        }
-    }
 
-    private fun bearingToCardinal(deg: Double): String {
-        val dirs = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
-        val index = ((deg + 22.5) / 45.0).toInt() % 8
-        return dirs[index]
-    }
-
-    private fun bearingToSpoken(deg: Double): String {
-        val dirs = arrayOf("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")
-        val index = ((deg + 22.5) / 45.0).toInt() % 8
-        return dirs[index]
-    }
 
     // --- Terrain: height above ground, altitude limit, line of sight ---
 
@@ -2995,9 +2625,6 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
      * the home of the replay (where the flight started) is used then, again the end of the home
      * line. Without it the terrain monitor falls back to its takeoff point.
      */
-    private fun antennaPosition(): Position? {
-        return if (isInReplayMode()) replayHomeGPS else map?.getMyLocation()
-    }
 
     /** "Sensor size" of the settings: the text and icons of both sensor bars. */
     private fun applySensorScale() {
@@ -3008,38 +2635,24 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
     /** Terrain data may have been installed or removed in the settings. */
     private fun reloadTerrainIfChanged() {
         // the monitor sends an empty state when it reloads: no readouts or marks of the old data stay
-        if (terrainMonitor?.reloadIfChanged() == true) {
+        if (dataService?.terrainMonitor?.reloadIfChanged() == true) {
             updateSensorsPlacement()
         }
     }
 
-    private fun updateTerrainAntenna() {
-        terrainMonitor?.onAntennaPosition(antennaPosition())
-        terrainMonitor?.requestUpdate()
-    }
-
     /**
-     * Shows the terrain readouts of the data service while this screen is visible (and the
-     * service is bound). Without a screen the monitor still follows the flight, but does not
-     * compute what nobody sees.
+     * The terrain readouts are calculated by the data service while this screen is visible (and
+     * the service is bound). Without a screen nothing is computed that nobody sees.
      */
     private fun attachTerrain() {
-        val monitor = terrainMonitor ?: return
-        if (terrainResetPending) {
-            terrainResetPending = false
-            monitor.reset()
-        }
+        val service = dataService ?: return
         reloadTerrainIfChanged()
         updateSensorsPlacement()
-        if (started) {
-            updateTerrainAntenna()
-            monitor.listener = this
-        }
+        service.setTerrainActive(started)
     }
 
     private fun detachTerrain() {
-        val monitor = terrainMonitor ?: return
-        if (monitor.listener === this) monitor.listener = null
+        dataService?.setTerrainActive(false)
     }
 
     private fun formatTerrainHeight(v: Float): String {
@@ -3050,13 +2663,7 @@ class MapsActivity : androidx.appcompat.app.AppCompatActivity(), DataDecoder.Lis
         }
     }
 
-    override fun onTerrainState(state: TerrainMonitor.State) {
-        // Idle (link lost, or not connected): the data service still knows the last state of
-        // the flight, but like every other readout it is not shown without a connection
-        if (state !== TerrainMonitor.EMPTY_STATE && !isInReplayMode() && dataService?.isConnected() != true) {
-            onTerrainState(TerrainMonitor.EMPTY_STATE)
-            return
-        }
+    private fun renderTerrain(state: TerrainMonitor.State) {
         heightAboveGround.text = formatTerrainHeight(state.heightAboveGround)
         heightAboveGround.setTextColor(if (state.aboveLimit) COLOR_SENSOR_ALERT else COLOR_SENSOR_NORMAL)
         altitudeLimit.text = formatTerrainHeight(state.altitudeLimit)

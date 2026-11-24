@@ -15,10 +15,15 @@ import crazydude.com.telemetry.protocol.decoder.DataDecoder
  *
  * Connection callbacks go to [linkListener], which decides what they mean (a lost link or a
  * manual disconnect).
+ *
+ * @param restarts whether a decoder restart is a [Sample.Restart]: for a replay, played again
+ * from its start. A live link gets a new decoder on every connection, also when it is found again
+ * after it was lost: the flight goes on then, nothing is forgotten.
  */
 class SampleAssembler(
     private val sink: (Sample) -> Unit,
-    private val linkListener: LinkListener
+    private val linkListener: LinkListener,
+    private val restarts: Boolean = true
 ) : DataDecoder.Listener {
 
     interface LinkListener {
@@ -68,7 +73,7 @@ class SampleAssembler(
             changed = false
             bytes = 0
         }
-        sink(Sample.Restart)
+        if (restarts) sink(Sample.Restart)
     }
 
     override fun onConnected() {

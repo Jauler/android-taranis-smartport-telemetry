@@ -64,6 +64,14 @@ class PreferenceManager(context: Context) {
         )
     }
 
+    fun registerListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) {
+        sharedPreferences.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterListener(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) {
+        sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
     fun isLoggingEnabled(): Boolean {
         return sharedPreferences.getBoolean("logging_enabled", true)
     }

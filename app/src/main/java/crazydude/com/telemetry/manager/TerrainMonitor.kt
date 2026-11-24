@@ -1,6 +1,7 @@
 package crazydude.com.telemetry.manager
 
 import android.content.Context
+import crazydude.com.telemetry.operation.processors.TerrainProcessor
 import android.location.Location
 import android.os.Handler
 import android.os.HandlerThread
@@ -40,7 +41,7 @@ import java.util.Locale
 class TerrainMonitor(
     private val context: Context,
     private val preferenceManager: PreferenceManager
-) {
+) : TerrainProcessor.Target {
 
     interface Listener {
         fun onTerrainState(state: State)
@@ -164,23 +165,23 @@ class TerrainMonitor(
         listener?.onTerrainState(state)
     }
 
-    fun onAircraftPosition(lat: Double, lon: Double) {
+    override fun onAircraftPosition(lat: Double, lon: Double) {
         if (lat == 0.0 && lon == 0.0) return
         tracker.onAircraftPosition(Position(lat, lon))
         requestUpdate()
     }
 
-    fun onAltitude(altitude: Float) {
+    override fun onAltitude(altitude: Float) {
         tracker.onAltitude(altitude)
         requestUpdate()
     }
 
-    fun onArmedState(armed: Boolean) {
+    override fun onArmedState(armed: Boolean) {
         tracker.onArmedState(armed)
     }
 
     /** Position of the receiving antenna (the phone); null if not known. */
-    fun onAntennaPosition(position: Position?) {
+    override fun onAntennaPosition(position: Position?) {
         antenna = position
     }
 
@@ -192,7 +193,7 @@ class TerrainMonitor(
     }
 
     /** Forgets everything known about the flight (new connection, replay restart). */
-    fun reset() {
+    override fun reset() {
         if (BuildConfig.DEBUG) Log.d(STATE_TAG, "reset")
         tracker.reset()
         generation++

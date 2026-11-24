@@ -94,6 +94,20 @@ class SampleAssemblerTest {
     }
 
     @Test
+    fun aLiveLinksDecoderRestartForgetsNothing() {
+        val live = SampleAssembler({ samples.add(it) }, object : SampleAssembler.LinkListener {
+            override fun onConnected() {}
+            override fun onDisconnected() {}
+            override fun onConnectionFailed() {}
+            override fun onProtocolDetected(name: String) {}
+        }, restarts = false)
+        live.onRSSIData(50)
+        live.onDecoderRestart()
+        live.commit()
+        assertTrue(samples.isEmpty())
+    }
+
+    @Test
     fun connectionCallbacksGoToTheLinkListenerAfterAFlush() {
         assembler.onRSSIData(50)
         assembler.onDisconnected()
